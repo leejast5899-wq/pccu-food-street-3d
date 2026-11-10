@@ -1,3 +1,5 @@
+import { AERIAL_STREETS, AerialStore, CATEGORY_COLORS } from './aerialStores';
+
 export type HeldItemShape = 'bowl' | 'ricebowl' | 'friedbag' | 'drink';
 
 export interface MenuItem {
@@ -460,6 +462,218 @@ export const SHOPS: ShopConfig[] = [
     ],
   },
 ];
+
+const EXTRA_SHOP_CACHE = new Map<string, ShopConfig>();
+
+/**
+ * 為空拍定位上的全部 24 間店家提供完整可點餐/互動的 ShopConfig
+ */
+export function getShopConfigForAerialStore(store: AerialStore): ShopConfig {
+  const existing = SHOPS.find((s) => s.id === store.linkedShopId || s.id === store.id);
+  if (existing) {
+    return {
+      ...existing,
+      name: store.name,
+      signText: store.name.slice(0, 7),
+      verticalSignText: store.name.replace(/[^\u4e00-\u9fa5A-Za-z0-9]/g, '').slice(0, 5),
+    };
+  }
+  const cached = EXTRA_SHOP_CACHE.get(store.id);
+  if (cached) return cached;
+
+  const streetName = AERIAL_STREETS.find((st) => st.id === store.street)?.name ?? '文化美食街';
+  const themeColor = CATEGORY_COLORS[store.category] ?? '#b45309';
+
+  const presetMenus: Record<
+    string,
+    { style: ShopConfig['style']; quote: string; items: Array<[string, number, string, HeldItemShape, string]> }
+  > = {
+    dunhuang: {
+      style: 'bento',
+      quote: '「華岡路47巷老字號快餐！三菜一主菜配熱湯，下課肚子餓點雞腿飯最飽！」',
+      items: [
+        ['招牌脆皮雞腿快餐', 105, '🍗', 'ricebowl', '外皮金黃酥脆的大雞腿配三樣家常配菜，飽足感滿分！'],
+        ['現炸排骨便當', 95, '🥩', 'ricebowl', '古早味醃製里肌排骨，鹹香下飯！'],
+      ],
+    },
+    huoyanyan: {
+      style: 'donburi',
+      quote: '「直火炭烤燒肉香氣撲鼻！每一片肉都帶有迷人的炭火焦香！」',
+      items: [
+        ['炭火炙燒五花豚丼', 120, '🔥', 'ricebowl', '直火炭烤逼出油脂香氣，淋上獨門燒肉醬超下飯！'],
+        ['火炎焱雙拼炭火便當', 135, '🥩', 'ricebowl', '炭烤牛五花配嫩雞腿肉，雙倍炭香享受！'],
+      ],
+    },
+    'teppan-bento': {
+      style: 'bento',
+      quote: '「滋滋作響的鐵板黑胡椒牛柳與雞排，現炒熱騰騰上桌！」',
+      items: [
+        ['黑胡椒鐵板牛柳飯', 110, '🥘', 'ricebowl', '洋蔥黑胡椒醬在鐵板上滋滋作響，微辣濃郁超暖胃！'],
+        ['鐵板香煎雞腿排飯', 105, '🍗', 'ricebowl', '鐵板煎到恰恰的無骨雞腿排，淋上蘑菇醬汁。'],
+      ],
+    },
+    '8guo': {
+      style: 'spicy',
+      quote: '「陽明山十度寒流來襲？進來 8鍋 點一鍋熱騰騰臭臭鍋，白飯王子麵滷肉飯吃到飽！」',
+      items: [
+        ['招牌大腸臭臭鍋', 150, '🍲', 'bowl', '濃郁沙茶湯頭配滷大腸、臭豆腐與滿滿火鍋料，瞬間驅散山城寒氣！'],
+        ['韓式部隊起司鍋', 165, '🧀', 'bowl', '微辣泡菜湯底融化整片濃郁起司，文化冬夜首選！'],
+      ],
+    },
+    yuanyuanyuan: {
+      style: 'noodle',
+      quote: '「華岡路47巷溫馨家常料理，熱湯麵與水餃現點現煮！」',
+      items: [
+        ['招牌手工高麗菜水餃', 80, '🥟', 'bowl', '顆顆飽滿清甜的手工水餃，沾點蒜泥醬油最對味。'],
+        ['家常什錦湯麵', 90, '🍜', 'bowl', '大骨高湯加入肉片、鮮蝦與蔬菜，清爽暖胃。'],
+      ],
+    },
+    'vietnam-hall': {
+      style: 'noodle',
+      quote: '「道地越南河粉與涼拌春捲，酸辣開胃清爽無負擔！」',
+      items: [
+        ['越式酸辣海鮮河粉', 120, '🦐', 'bowl', '香茅檸檬酸辣湯頭搭配鮮蝦與Q彈河粉！'],
+        ['越式鮮蝦生春捲', 85, '🌯', 'friedbag', '米紙包裹鮮蝦、米線與脆口生菜，沾魚露酸甜清爽。'],
+      ],
+    },
+    '711-daxue': {
+      style: 'tea',
+      quote: '「歡迎光臨 7-ELEVEN 大學門市！早八咖啡、茶葉蛋、關東煮24小時陪伴華岡人！」',
+      items: [
+        ['CITY CAFE 大杯熱拿鐵', 55, '☕', 'drink', '早八與趕報告的救命神器，握在手裡超暖手！'],
+        ['所長茶葉蛋＋關東煮組合', 65, '🥚', 'bowl', '滷到蛋白都入味的茶葉蛋配熱呼呼蘿蔔高湯！'],
+      ],
+    },
+    'pccu-sports': {
+      style: 'tea',
+      quote: '「文化體育用品社！山城抗風運動外套、球拍與熱飲補給應有盡有！」',
+      items: [
+        ['運動後機能能量飲', 45, '⚡', 'drink', '爬完仇人坡或上完體育課後迅速補充體力！'],
+        ['華岡暖手暖暖包組', 50, '🔥', 'friedbag', '放進口袋瞬間提升全身暖身度！'],
+      ],
+    },
+    'haochi-friedrice': {
+      style: 'donburi',
+      quote: '「華岡路47巷2弄超人氣『好吃炒飯』！大火快炒、粒粒分明、免費加飯吃超飽！」',
+      items: [
+        ['招牌黃金蝦仁蛋炒飯', 100, '🍤', 'ricebowl', '大火爆炒出極致鍋氣，米飯粒粒分明包裹金黃蛋液！'],
+        ['醬香牛肉蛋炒飯', 105, '🍳', 'ricebowl', '軟嫩牛肉絲與青蔥醬油大火翻炒，香氣傳遍整條2弄！'],
+      ],
+    },
+    'univ-foodcourt': {
+      style: 'bento',
+      quote: '「大學城餐飲美食館！多樣化快餐、鐵板麵與熱湯，下課聚餐最方便！」',
+      items: [
+        ['大學城特製黑胡椒豬排麵', 95, '🍝', 'bowl', '鐵板滋滋作響的厚切豬排配滑順鐵板麵與荷包蛋！'],
+        ['酥炸咔啦雞腿蓋飯', 105, '🍗', 'ricebowl', '酥脆咔啦雞腿淋上香濃咖哩醬汁！'],
+      ],
+    },
+    'straight-a': {
+      style: 'tea',
+      quote: '「Straight A Apple 教育商店・文大校園門市！來杯熱可可邊逛最新 iPad 與 Mac 吧！」',
+      items: [
+        ['校園門市限定熱可可', 60, '🍫', 'drink', '香濃熱可可讓趕期末專案的心情瞬間療癒！'],
+      ],
+    },
+    jiancha: {
+      style: 'tea',
+      quote: '「光華路26巷老字號『煎茶苑』！現泡日式煎茶與波霸奶綠，陪伴無數屆文化人！」',
+      items: [
+        ['招牌日式翡翠煎茶', 40, '🍵', 'drink', '清香回甘的招牌煎茶，解膩又醒腦！'],
+        ['煎茶苑波霸奶綠', 55, '🧋', 'drink', 'Q彈波霸搭配茉莉煎茶奶綠，清爽不甜膩！'],
+      ],
+    },
+    mamale: {
+      style: 'fried',
+      quote: '「早安同學！媽媽樂早餐現煎薯餅蛋餅、咔啦雞腿吐司配大冰奶，精神百倍上早八！」',
+      items: [
+        ['起司薯餅塔蛋餅', 60, '🥞', 'friedbag', '外酥內嫩的蛋餅包入雙層金黃薯餅與牽絲起司！'],
+        ['早餐店傳奇大冰奶', 35, '🥤', 'drink', '台灣大學生早八必備的靈魂飲品！'],
+      ],
+    },
+    '711-wenxue': {
+      style: 'tea',
+      quote: '「歡迎光臨 7-ELEVEN 文學門市！大紅袍正對面的覓食中繼站，熱食飲料隨時補給！」',
+      items: [
+        ['熱騰騰黑糖珍珠撞奶', 60, '🧋', 'drink', '24小時都能喝到的濃郁黑糖珍珠鮮奶！'],
+        ['御飯糰＋熱關東煮湯', 75, '🍙', 'bowl', '宵夜時段最溫暖的便利組合！'],
+      ],
+    },
+    wensi: {
+      style: 'tea',
+      quote: '「文思文具行！建築系美術系救急材料、原子筆講義影印，還有隨手零食補給！」',
+      items: [
+        ['趕圖熬夜提神咖啡', 45, '☕', 'drink', '買完模型材料順手帶一杯，今晚熬夜趕圖不打瞌睡！'],
+      ],
+    },
+    'the-x-burger': {
+      style: 'fried',
+      quote: '「The X Burger！光華路26巷美式手作漢堡與早午餐，厚切牛肉排現點現煎！」',
+      items: [
+        ['The X 經典雙層起司牛堡', 125, '🍔', 'friedbag', '手打多汁牛肉排夾入雙倍切達起司與酥脆培根！'],
+        ['美式脆薯配蜂蜜芥末醬', 65, '🍟', 'friedbag', '現炸金黃粗薯條，外酥內鬆軟！'],
+      ],
+    },
+    'corner-genki': {
+      style: 'bento',
+      quote: '「轉角元氣站！在光華路26巷轉角為你補充滿滿元氣的營養健康餐盒！」',
+      items: [
+        ['元氣舒肥嫩雞胸餐盒', 115, '🥗', 'ricebowl', '軟嫩舒肥雞胸搭配紫米飯與五色時蔬，健康滿分！'],
+        ['炙燒鹽麴松阪豬餐盒', 130, '🍱', 'ricebowl', 'Q脆松阪豬配溏心蛋與甘甜季節蔬菜！'],
+      ],
+    },
+    'window-books': {
+      style: 'tea',
+      quote: '「/窗裡/ 有食.有書：在光華路巷尾找一個安靜角落，看一本書、配一份手作甜點與手沖咖啡。」',
+      items: [
+        ['窗裡手沖單品熱咖啡', 95, '☕', 'drink', '溫潤果香的手沖咖啡，聽著窗外陽明山雨聲超愜意。'],
+        ['焦糖布丁與手作司康', 110, '🍮', 'bowl', '微苦焦糖大人系布丁，午後讀書時光的最佳陪伴。'],
+      ],
+    },
+  };
+
+  const preset = presetMenus[store.id] ?? {
+    style: 'bento',
+    quote: `「歡迎光臨${store.name}！現點現做熱騰騰供應中！」`,
+    items: [['招牌人氣特餐', 100, '🍱', 'ricebowl', `${store.name}最受文化同學歡迎的招牌料理！`]],
+  };
+
+  const built: ShopConfig = {
+    id: store.id,
+    name: store.name,
+    signText: store.name.slice(0, 7),
+    verticalSignText: store.name.replace(/[^\u4e00-\u9fa5A-Za-z0-9]/g, '').slice(0, 5),
+    subtitle: `${streetName} ・ 座標 (${store.position.x}, ${store.position.z})`,
+    tag: store.category,
+    side: store.side === 'north' || store.side === 'west' ? 'left' : 'right',
+    z: store.position.z,
+    themeColor,
+    accentColor: '#fef08a',
+    style: preset.style,
+    bossName: `${store.name}店長`,
+    bossQuote: preset.quote,
+    menuLines: preset.items.map(([n, p]) => `${n} $${p}`),
+    items: preset.items.map(([itemName, price, emoji, heldShape, desc], i) => ({
+      id: `${store.id}-item-${i}`,
+      shopId: store.id,
+      name: itemName,
+      price,
+      emoji,
+      hunger: heldShape === 'drink' ? 16 : 44,
+      warmth: 20,
+      mood: 24,
+      coolsSpice: heldShape === 'drink',
+      heldShape,
+      dishColor: themeColor,
+      accentColor: '#fef08a',
+      description: desc,
+      eatComment: `品嚐了【${store.name}】的${itemName}，太滿足了！`,
+    })),
+  };
+
+  EXTRA_SHOP_CACHE.set(store.id, built);
+  return built;
+}
 
 export const LANDMARKS: LandmarkInfo[] = [
   {

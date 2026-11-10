@@ -12,12 +12,13 @@ import {
   ShopConfig,
   TRIVIA_QUESTIONS,
   TriviaQuestion,
+  getShopConfigForAerialStore,
 } from '../data/shops';
 import { Google3DTilesWorld } from '../maps/google3DTiles';
 import { GoogleMap3DController } from '../maps/googleMaps3D';
 import { getSavedGoogleMapsApiKey, saveGoogleMapsApiKey } from '../maps/googleMapsLoader';
 import { AABB, BuiltAlley, Interactable, buildGuanghuaAlley, createStylizedPerson } from '../world/alleyBuilder';
-import { AerialMapWorld } from '../world/aerialMap';
+import { AerialMapWorld, normalizedToWorld } from '../world/aerialMap';
 import { AERIAL_STORES, AERIAL_STREETS, AerialStore } from '../data/aerialStores';
 import { HeldItemRig } from '../world/heldItems';
 import { StudentNPC, StudentNPCManager } from '../world/npcs';
@@ -58,10 +59,10 @@ export class GameController {
   private aerialPointerDown = { x: 0, y: 0, active: false };
   private activeAerialStore: AerialStore | null = null;
 
-  // Player state
-  private playerPos = new THREE.Vector3(0, 1.65, 22.8);
+  // Player state (starts on 光華路26巷 between 7-ELEVEN 文學門市 and 大紅袍麵店)
+  private playerPos = normalizedToWorld(-5, 20.5).setY(1.65);
   private velocityY = 0;
-  private yaw = 0; // 0 looks toward -Z (down the alley)
+  private yaw = -1.22; // Looking east-northeast along 光華路26巷 toward 大紅袍麵店 & 越福鄉
   private pitch = -0.04;
   private isGrounded = true;
   private isSeated = false;
@@ -233,18 +234,33 @@ export class GameController {
       this.startGame(false);
       const view = params.get('view');
       if (view === 'dahongpao-ext') {
-        // Switch to afternoon daylight for crisp storefront inspection
+        // Switch to afternoon daylight for crisp storefront inspection at { x: 1, z: 25 }
         this.weatherTime.cycleTime();
         this.weatherTime.cycleTime(); // night -> latenight -> afternoon
-        this.playerPos.set(-1.35, 1.78, 0.95);
-        this.yaw = Math.PI / 2 - 0.38;
+        const dhpStore = AERIAL_STORES.find((s) => s.id === 'dahongpao')!;
+        const storePos = normalizedToWorld(dhpStore.position.x, dhpStore.position.z);
+        const rotY = dhpStore.rotationY ?? 0;
+        const frontNormal = new THREE.Vector3(Math.sin(rotY), 0, Math.cos(rotY));
+        const rightTangent = new THREE.Vector3(Math.cos(rotY), 0, -Math.sin(rotY));
+        this.playerPos
+          .copy(storePos)
+          .addScaledVector(frontNormal, 3.65)
+          .addScaledVector(rightTangent, 2.35)
+          .setY(1.78);
+        const lookAtPos = storePos.clone().addScaledVector(rightTangent, -1.15).setY(1.55);
+        this.yaw = Math.atan2(-(lookAtPos.x - this.playerPos.x), -(lookAtPos.z - this.playerPos.z));
         this.pitch = -0.06;
         this.updateHUD();
       } else if (view === 'dahongpao-int') {
         this.weatherTime.cycleTime();
         this.weatherTime.cycleTime();
-        this.playerPos.set(-11.45, 1.56, -0.85);
-        this.yaw = -Math.PI / 2 + 0.08;
+        const seat = this.alley.interactables.find((i) => i.id === 'seat-dahongpao-photo-view');
+        if (seat && seat.seatLookAt) {
+          this.playerPos.set(seat.position.x, 1.56, seat.position.z);
+          const dx = seat.seatLookAt.x - seat.position.x;
+          const dz = seat.seatLookAt.z - seat.position.z;
+          this.yaw = Math.atan2(-dx, -dz) + 0.06;
+        }
         this.pitch = -0.02;
         this.updateHUD();
       } else if (view === 'isometric') {
@@ -252,8 +268,8 @@ export class GameController {
         this.weatherTime.cycleTime();
         this.weatherTime.cycleTime();
         this.weatherTime.cycleTime(); // night -> latenight -> afternoon -> sunset
-        this.playerPos.set(-0.6, 1.65, 2.5);
-        this.yaw = 0.35;
+        this.playerPos.copy(normalizedToWorld(-2, 19.5)).setY(1.65);
+        this.yaw = -1.2;
         this.toggleIsometricMode();
         this.updateHUD();
       } else if (view === 'aerial' || view === 'aerial-debug') {
@@ -299,11 +315,16 @@ export class GameController {
     });
     document.getElementById('close-store-info-modal')!.addEventListener('click', () => this.closeAllModals());
     document.getElementById('btn-store-info-order')!.addEventListener('click', () => {
-      const linked = this.activeAerialStore?.linkedShopId;
-      const shop = SHOPS.find((s) => s.id === linked);
-      if (!shop) return;
+      if (!this.activeAerialStore) return;
+      const store = this.activeAerialStore;
+      const shop = getShopConfigForAerialStore(store);
+      const storePos = normalizedToWorld(store.position.x, store.position.z);
+      const rotY = store.rotationY ?? 0;
+      const frontNormal = new THREE.Vector3(Math.sin(rotY), 0, Math.cos(rotY));
+      this.playerPos.copy(storePos).addScaledVector(frontNormal, 3.8).setY(1.65);
+      this.yaw = Math.atan2(frontNormal.x, frontNormal.z);
       this.closeAllModals();
-      this.toggleAerialMode();
+      if (this.aerialMode) this.toggleAerialMode();
       this.openShopModal(shop);
     });
 
@@ -531,7 +552,7 @@ export class GameController {
       }
     }
 
-    this.showToast('歡迎來到文化大學光華路26巷！往前走就是牛肉拌麵與感恩麵店 🍜');
+    this.showToast('歡迎來到文化大學美食街！已依空拍底圖完整重建「光華路26巷・華岡路47巷2弄・華岡路47巷」共 24 間店家 🍜');
   }
 
   private cycleTime(): void {
@@ -961,7 +982,7 @@ export class GameController {
       this.alley.rootGroup.visible = true;
       this.npcManager.group.visible = true;
       if (this.viewMode === '3dtiles') {
-        this.playerPos.set(0, 1.65, 22.8);
+        this.playerPos.copy(normalizedToWorld(-5, 20.5)).setY(1.65);
       }
       this.viewMode = 'alley';
       this.elCrosshair.classList.toggle('hidden', this.photoMode);
@@ -1045,8 +1066,8 @@ export class GameController {
     this.keys.clear();
 
     this.aerialWorld.setActive(on);
-    this.alley.rootGroup.visible = !on;
-    this.npcManager.group.visible = !on;
+    this.alley.rootGroup.visible = true;
+    this.npcManager.group.visible = true;
     this.renderPass.camera = on ? this.aerialWorld.camera : this.camera;
 
     if (on) {
@@ -1152,7 +1173,7 @@ export class GameController {
       });
     }
 
-    document.getElementById('btn-store-info-order')!.classList.toggle('hidden', !store.linkedShopId);
+    document.getElementById('btn-store-info-order')!.classList.remove('hidden');
 
     this.elModalBackdrop.classList.remove('hidden');
     document.getElementById('store-info-modal')!.classList.remove('hidden');

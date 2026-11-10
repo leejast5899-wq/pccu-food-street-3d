@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { NPC_STUDENT_DIALOGUES } from '../data/shops';
+import { normalizedToWorld } from './aerialMap';
 import { createStylizedPerson } from './alleyBuilder';
 
 export interface StudentNPC {
@@ -9,9 +10,9 @@ export interface StudentNPC {
   speaker: string;
   lines: string[];
   lineIndex: number;
-  baseX: number;
-  minZ: number;
-  maxZ: number;
+  startPos: THREE.Vector3;
+  endPos: THREE.Vector3;
+  progress: number;
   direction: 1 | -1;
   speed: number;
   pauseTimer: number;
@@ -23,14 +24,23 @@ export class StudentNPCManager {
 
   constructor(scene: THREE.Scene) {
     scene.add(this.group);
-    const configs = [
-      { x: -2.2, z: 10, minZ: -20, maxZ: 22, shirt: '#3b82f6', hair: '#1e1b4b', dIdx: 0 },
-      { x: 2.3, z: -4, minZ: -26, maxZ: 20, shirt: '#10b981', hair: '#451a03', dIdx: 1 },
-      { x: -1.3, z: -18, minZ: -38, maxZ: 12, shirt: '#f59e0b', hair: '#1f2937', dIdx: 2 },
-      { x: 1.4, z: 18, minZ: -12, maxZ: 23, shirt: '#ec4899', hair: '#312e81', dIdx: 3 },
+
+    // 8 Student NPCs patrolling all 3 real streets (光華路26巷・華岡路47巷2弄・華岡路47巷)
+    const routes = [
+      // 光華路26巷 (South food street)
+      { a: [-22, 27], b: [6, 13], t: 0.35, shirt: '#3b82f6', hair: '#1e1b4b', dIdx: 0 },
+      { a: [-8, 21], b: [24, 5], t: 0.62, shirt: '#10b981', hair: '#451a03', dIdx: 1 },
+      { a: [4, 15], b: [36, 0], t: 0.25, shirt: '#ec4899', hair: '#312e81', dIdx: 3 },
+      // 華岡路47巷2弄 (Central vertical alley)
+      { a: [11, -35], b: [21, -5], t: 0.48, shirt: '#f59e0b', hair: '#1f2937', dIdx: 2 },
+      { a: [13, -30], b: [23, -1], t: 0.78, shirt: '#8b5cf6', hair: '#1e293b', dIdx: 0 },
+      // 華岡路47巷 (North bento street)
+      { a: [-42, -23], b: [-14, -36], t: 0.4, shirt: '#ef4444', hair: '#292524', dIdx: 1 },
+      { a: [-22, -32], b: [14, -40], t: 0.55, shirt: '#06b6d4', hair: '#1e1b4b', dIdx: 2 },
+      { a: [2, -38], b: [30, -43], t: 0.3, shirt: '#f97316', hair: '#3f2e21', dIdx: 3 },
     ];
 
-    configs.forEach((cfg, idx) => {
+    routes.forEach((cfg, idx) => {
       const person = createStylizedPerson(cfg.shirt, '#f5d0b5', cfg.hair);
       // Sculpted rounded student backpack
       const bag = new THREE.Mesh(
@@ -62,10 +72,12 @@ export class StudentNPCManager {
       umbrella.visible = false;
       person.add(umbrella);
 
-      person.position.set(cfg.x, 0, cfg.z);
+      const startPos = normalizedToWorld(cfg.a[0], cfg.a[1]);
+      const endPos = normalizedToWorld(cfg.b[0], cfg.b[1]);
+      person.position.lerpVectors(startPos, endPos, cfg.t);
       this.group.add(person);
 
-      const dlg = NPC_STUDENT_DIALOGUES[cfg.dIdx];
+      const dlg = NPC_STUDENT_DIALOGUES[cfg.dIdx % NPC_STUDENT_DIALOGUES.length];
       this.npcs.push({
         id: `student-${idx}`,
         mesh: person,
@@ -73,11 +85,11 @@ export class StudentNPCManager {
         speaker: dlg.speaker,
         lines: dlg.lines,
         lineIndex: 0,
-        baseX: cfg.x,
-        minZ: cfg.minZ,
-        maxZ: cfg.maxZ,
-        direction: idx % 2 === 0 ? -1 : 1,
-        speed: 1.15 + idx * 0.15,
+        startPos,
+        endPos,
+        progress: cfg.t,
+        direction: idx % 2 === 0 ? 1 : -1,
+        speed: 1.25 + (idx % 3) * 0.2,
         pauseTimer: 0,
       });
     });
@@ -107,7 +119,6 @@ export class StudentNPCManager {
         if (limbs.rightArmPivot) limbs.rightArmPivot.rotation.x = useUmbrella ? -0.55 : 0;
 
         if (distToPlayer < 2.6) {
-          // Politely pause and turn slightly toward player when close
           const lookAngle = Math.atan2(
             playerPos.x - npc.mesh.position.x,
             playerPos.z - npc.mesh.position.z
@@ -119,23 +130,34 @@ export class StudentNPCManager {
         return;
       }
 
-      npc.mesh.position.z += npc.direction * npc.speed * dt;
-      // Natural walking stride swing for legs & arms
+      const routeLen = Math.max(1, npc.startPos.distanceTo(npc.endPos));
+      npc.progress += (npc.direction * npc.speed * dt) / routeLen;
+
+      if (npc.progress >= 1) {
+        npc.progress = 1;
+        npc.direction = -1;
+        npc.pauseTimer = 1.4 + Math.random() * 1.8;
+      } else if (npc.progress <= 0) {
+        npc.progress = 0;
+        npc.direction = 1;
+        npc.pauseTimer = 1.4 + Math.random() * 1.8;
+      }
+
+      npc.mesh.position.lerpVectors(npc.startPos, npc.endPos, npc.progress);
+
       const stride = Math.sin(elapsed * 6.5 + idx * 1.3);
       npc.mesh.position.y = Math.abs(stride) * 0.032;
-      npc.mesh.rotation.y = npc.direction > 0 ? 0 : Math.PI;
+
+      const travelVec =
+        npc.direction > 0
+          ? npc.endPos.clone().sub(npc.startPos)
+          : npc.startPos.clone().sub(npc.endPos);
+      npc.mesh.rotation.y = Math.atan2(travelVec.x, travelVec.z);
+
       if (limbs.leftLegPivot) limbs.leftLegPivot.rotation.x = stride * 0.48;
       if (limbs.rightLegPivot) limbs.rightLegPivot.rotation.x = -stride * 0.48;
       if (limbs.leftArmPivot) limbs.leftArmPivot.rotation.x = -stride * 0.36;
       if (limbs.rightArmPivot) limbs.rightArmPivot.rotation.x = useUmbrella ? -0.55 : stride * 0.36;
-
-      if (npc.mesh.position.z >= npc.maxZ) {
-        npc.direction = -1;
-        npc.pauseTimer = 1.6 + Math.random() * 2;
-      } else if (npc.mesh.position.z <= npc.minZ) {
-        npc.direction = 1;
-        npc.pauseTimer = 1.6 + Math.random() * 2;
-      }
     });
   }
 
