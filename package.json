@@ -1,0 +1,20 @@
+{
+  "name": "pccu-food-street-3d",
+  "version": "1.0.0",
+  "private": true,
+  "description": "中國文化大學・光華路26巷 3D 美食街生活模擬遊戲",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "three": "^0.170.0"
+  },
+  "devDependencies": {
+    "@types/three": "^0.170.0",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.11"
+  }
+}

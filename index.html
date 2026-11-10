@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>文化大學・光華路26巷 3D 美食街生活模擬</title>
+  </head>
+  <body>
+    <div id="app">
+      <canvas id="game-canvas"></canvas>
+
+      <!-- Spicy / Cold / Rain Screen Vignette Effects -->
+      <div id="screen-fx-layer">
+        <div id="rain-vignette"></div>
+        <div id="spice-vignette"></div>
+        <div id="cold-vignette"></div>
+      </div>
+
+      <!-- Crosshair -->
+      <div id="crosshair" class="hidden">
+        <div class="crosshair-dot"></div>
+      </div>
+
+      <!-- Top HUD -->
+      <header id="hud-top" class="hud-panel">
+        <div class="hud-brand">
+          <div class="street-badge">士林區 陽明山</div>
+          <div>
+            <h1>光華路26巷・文化美食街</h1>
+            <p id="env-status-text">🌙 華燈初上 ・ 🌤️ 山城微風 (18°C)</p>
+          </div>
+        </div>
+
+        <div class="hud-stats">
+          <div class="stat-pill money">
+            <span class="stat-icon">💰</span>
+            <div>
+              <small>生活費</small>
+              <strong id="stat-money">NT$ 600</strong>
+            </div>
+          </div>
+          <div class="stat-pill">
+            <span class="stat-icon">🍜</span>
+            <div class="meter-wrap">
+              <div class="meter-label"><small>飽足感</small><span id="stat-hunger-num">65%</span></div>
+              <div class="meter-track"><div id="stat-hunger-bar" class="meter-fill hunger" style="width: 65%"></div></div>
+            </div>
+          </div>
+          <div class="stat-pill">
+            <span class="stat-icon">🔥</span>
+            <div class="meter-wrap">
+              <div class="meter-label"><small>暖身度</small><span id="stat-warmth-num">78%</span></div>
+              <div class="meter-track"><div id="stat-warmth-bar" class="meter-fill warmth" style="width: 78%"></div></div>
+            </div>
+          </div>
+          <div class="stat-pill">
+            <span class="stat-icon">📖</span>
+            <div>
+              <small>美食圖鑑</small>
+              <strong id="stat-journal">0 / 18</strong>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <!-- Top Right Quick Controls -->
+      <div id="hud-quick-actions" class="hud-panel">
+        <button id="btn-time" class="chip-btn" title="切換時段 [1]">🕒 時段</button>
+        <button id="btn-weather" class="chip-btn" title="切換陽明山天候 [2]">🌫️ 天氣</button>
+        <button id="btn-umbrella" class="chip-btn" title="撐傘 / 收傘 [U]">☂️ 雨傘</button>
+        <button id="btn-journal" class="chip-btn" title="美食圖鑑與打卡 [J]">📖 圖鑑</button>
+        <button id="btn-photo" class="chip-btn" title="純淨拍照模式 [P]">📷 拍照</button>
+        <button id="btn-sound" class="chip-btn" title="開啟/靜音音效 [M]">🔊 音效</button>
+      </div>
+
+      <!-- Center Interaction Prompt -->
+      <div id="interact-prompt" class="hidden">
+        <span class="keycap">E</span>
+        <span id="interact-label">查看攤位</span>
+      </div>
+
+      <!-- Held Food / Drink Prompt (Bottom Right) -->
+      <div id="held-item-card" class="hidden">
+        <div class="held-header">
+          <span id="held-emoji">🍜</span>
+          <div>
+            <strong id="held-name">招牌牛肉拌麵</strong>
+            <small id="held-sub">熱騰騰香氣撲鼻！</small>
+          </div>
+        </div>
+        <div class="held-action-hint">
+          <span class="keycap">F</span> 享用（剩 <span id="held-bites">3</span> 口） ・ 也可找板凳按 <span class="keycap">E</span> 坐下吃
+        </div>
+      </div>
+
+      <!-- Seated Indicator -->
+      <div id="seated-banner" class="hidden">
+        🪑 正在路邊板凳休息用餐中 ・ 按 <span class="keycap">E</span> 或 <span class="keycap">Space</span> 起身繼續逛街
+      </div>
+
+      <!-- Toast / Dialogue Bubble -->
+      <div id="toast-container"></div>
+      <div id="dialogue-box" class="hidden">
+        <div class="dialogue-speaker" id="dialogue-speaker">巷口學長</div>
+        <div class="dialogue-text" id="dialogue-text">這霧濃到連對面牛肉拌麵的燈箱都快看不見了！</div>
+        <div class="dialogue-hint">按 <span class="keycap">E</span> 或點擊關閉</div>
+      </div>
+
+      <!-- Bottom Controls Bar -->
+      <div id="hud-controls-hint">
+        <span><kbd>WASD</kbd> 漫步</span>
+        <span><kbd>Shift</kbd> 快走</span>
+        <span><kbd>滑鼠</kbd> 環顧街景（點畫面鎖定／拖曳轉向）</span>
+        <span><kbd>E</kbd> 互動點餐 / 坐下</span>
+        <span><kbd>F</kbd> 吃美食</span>
+        <span><kbd>U</kbd> 撐傘</span>
+        <span><kbd>1</kbd> 時段 <kbd>2</kbd> 天氣</span>
+      </div>
+
+      <!-- Photo Mode Exit Pill -->
+      <div id="photo-exit-hint" class="hidden">
+        📷 拍照模式中 ・ 按 <kbd>P</kbd> 恢復介面
+      </div>
+
+      <!-- Modal Backdrop -->
+      <div id="modal-backdrop" class="hidden">
+        <!-- Shop Menu Modal -->
+        <section id="shop-modal" class="modal-card hidden">
+          <div class="modal-header">
+            <div>
+              <span id="shop-modal-tag" class="modal-tag">40年傳奇老店</span>
+              <h2 id="shop-modal-title">無招牌・大陸牛肉拌麵</h2>
+              <p id="shop-modal-quote" class="shop-quote">「同學進來坐喔！今天要加蒜嗎？旁邊大骨湯自己裝！」</p>
+            </div>
+            <button id="close-shop-modal" class="icon-close">✕</button>
+          </div>
+          <div id="shop-menu-grid" class="menu-grid"></div>
+        </section>
+
+        <!-- Journal & Landmarks Modal -->
+        <section id="journal-modal" class="modal-card hidden">
+          <div class="modal-header">
+            <div>
+              <span class="modal-tag">華岡人的味蕾記憶</span>
+              <h2>光華路26巷・美食與打卡圖鑑</h2>
+              <p class="shop-quote">收集巷弄名店料理，解鎖陽明山限定天氣與街景彩蛋！</p>
+            </div>
+            <button id="close-journal-modal" class="icon-close">✕</button>
+          </div>
+          <div class="journal-tabs">
+            <button id="tab-foods" class="tab-btn active">🍜 必吃美食 (<span id="count-foods">0/18</span>)</button>
+            <button id="tab-landmarks" class="tab-btn">📍 文化打卡 (<span id="count-landmarks">0/6</span>)</button>
+          </div>
+          <div id="journal-content" class="journal-grid"></div>
+        </section>
+
+        <!-- Senior Errand / Trivia Modal (Earn NT$) -->
+        <section id="trivia-modal" class="modal-card hidden">
+          <div class="modal-header">
+            <div>
+              <span class="modal-tag">華岡生活支援</span>
+              <h2 id="trivia-title">學長姐快閃小委託 ＆ 提款補貼</h2>
+              <p id="trivia-subtitle" class="shop-quote">回答關於文化大學與光華路的在地小問題，就能賺取飯錢！</p>
+            </div>
+            <button id="close-trivia-modal" class="icon-close">✕</button>
+          </div>
+          <div id="trivia-body" class="trivia-body"></div>
+        </section>
+      </div>
+
+      <!-- Start / Pause Welcome Screen -->
+      <div id="start-overlay">
+        <div class="start-card">
+          <div class="start-badge">PCCU ・ 陽明山光華路26巷 3D 模擬器</div>
+          <h1>文化大學美食街漫步</h1>
+          <p class="start-lead">
+            歡迎來到海拔四百公尺的華岡！從「仇人坡」指標走進熱鬧的<strong>光華路26巷</strong>，
+            逛逛傳奇<strong>牛肉拌麵</strong>、月底救星<strong>感恩麵店</strong>、<strong>大紅袍</strong>、<strong>赤鳥家</strong>、宵夜<strong>塩酥雞</strong>與<strong>手搖飲</strong>，
+            體驗隨時飄來的<strong>陽明山大霧、文化強風</strong>與巷尾的<strong>台北盆地夜景</strong>。
+          </p>
+
+          <div class="start-features">
+            <div class="feat">🚶 <strong>第一人稱街景</strong><span>WASD 散步＋滑鼠看招牌、坐板凳吃麵</span></div>
+            <div class="feat">🍲 <strong>六大代表店家</strong><span>18 種在地餐點＋免費大骨/柴魚清湯</span></div>
+            <div class="feat">🌫️ <strong>陽明山實時氣候</strong><span>一鍵切換晴午／黃昏／夜市／白牆大霧／強風雨</span></div>
+          </div>
+
+          <div class="start-actions">
+            <button id="btn-start-game" class="primary-btn">進入光華路26巷（鎖定滑鼠視角）</button>
+            <button id="btn-start-unlocked" class="secondary-btn">以拖曳滑鼠模式開始（免鎖定）</button>
+          </div>
+          <p class="start-footnote">提示：若滑鼠鎖定時按 <kbd>Esc</kbd> 可隨時呼叫游標或點擊選單；按 <kbd>E</kbd> 可與老闆、同學和路邊板凳互動。</p>
+        </div>
+      </div>
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
