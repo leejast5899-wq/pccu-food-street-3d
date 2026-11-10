@@ -16,7 +16,7 @@ import {
 import { Google3DTilesWorld } from '../maps/google3DTiles';
 import { GoogleMap3DController } from '../maps/googleMaps3D';
 import { getSavedGoogleMapsApiKey, saveGoogleMapsApiKey } from '../maps/googleMapsLoader';
-import { AABB, BuiltAlley, Interactable, buildGuanghuaAlley } from '../world/alleyBuilder';
+import { AABB, BuiltAlley, Interactable, buildGuanghuaAlley, createStylizedPerson } from '../world/alleyBuilder';
 import { HeldItemRig } from '../world/heldItems';
 import { StudentNPC, StudentNPCManager } from '../world/npcs';
 import { WeatherAndTimeSystem } from '../world/weatherAndTime';
@@ -45,6 +45,8 @@ export class GameController {
   private sound = new SoundEngine();
 
   private viewMode: ViewMode = 'alley';
+  private isometricMode = false;
+  private playerAvatar: THREE.Group;
 
   // Player state
   private playerPos = new THREE.Vector3(0, 1.65, 22.8);
@@ -128,6 +130,7 @@ export class GameController {
   private elColdVignette = document.getElementById('cold-vignette')!;
   private elBtnUmbrella = document.getElementById('btn-umbrella')!;
   private elBtnSound = document.getElementById('btn-sound')!;
+  private elBtnCameraIso = document.getElementById('btn-camera-iso')!;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -175,6 +178,17 @@ export class GameController {
     this.npcManager = new StudentNPCManager(this.scene);
     this.heldRig = new HeldItemRig(this.camera);
 
+    // 3D Player Avatar with Backpack (visible in 3/4 Isometric RPG Camera Mode)
+    this.playerAvatar = createStylizedPerson('#f59e0b', '#f5d0b5', '#1e293b');
+    const backpack = new THREE.Mesh(
+      new THREE.BoxGeometry(0.32, 0.42, 0.2),
+      new THREE.MeshStandardMaterial({ color: 0x991b1b, roughness: 0.72 })
+    );
+    backpack.position.set(0, 1.05, 0.22);
+    this.playerAvatar.add(backpack);
+    this.playerAvatar.visible = false;
+    this.scene.add(this.playerAvatar);
+
     this.google3DTiles = new Google3DTilesWorld(
       this.scene,
       (originPos) => {
@@ -220,6 +234,15 @@ export class GameController {
         this.playerPos.set(-11.45, 1.56, -0.85);
         this.yaw = -Math.PI / 2 + 0.08;
         this.pitch = -0.02;
+        this.updateHUD();
+      } else if (view === 'isometric') {
+        // Golden hour to twilight transition ("sunset" preset) + 3/4 isometric RPG perspective
+        this.weatherTime.cycleTime();
+        this.weatherTime.cycleTime();
+        this.weatherTime.cycleTime(); // night -> latenight -> afternoon -> sunset
+        this.playerPos.set(-0.6, 1.65, 2.5);
+        this.yaw = 0.35;
+        this.toggleIsometricMode();
         this.updateHUD();
       }
     }
@@ -346,6 +369,8 @@ export class GameController {
         this.togglePhotoMode();
       } else if (code === 'KeyM') {
         this.toggleMute();
+      } else if (code === 'KeyV') {
+        this.toggleIsometricMode();
       }
     });
 
@@ -357,6 +382,10 @@ export class GameController {
     document.getElementById('btn-real-3d')!.addEventListener('click', () => {
       this.sound.init();
       this.openGmapsModal();
+    });
+    this.elBtnCameraIso.addEventListener('click', () => {
+      this.sound.init();
+      this.toggleIsometricMode();
     });
     document.getElementById('btn-time')!.addEventListener('click', () => {
       this.sound.init();
@@ -513,6 +542,19 @@ export class GameController {
     const muted = this.sound.toggleMute();
     this.elBtnSound.textContent = muted ? '🔇 靜音' : '🔊 音效';
     this.showToast(muted ? '已關閉環境音效' : '已開啟光華路環境音效');
+  }
+
+  private toggleIsometricMode(): void {
+    this.isometricMode = !this.isometricMode;
+    this.playerAvatar.visible = this.isometricMode;
+    this.elBtnCameraIso.classList.toggle('active', this.isometricMode);
+    this.elBtnCameraIso.textContent = this.isometricMode ? '🚶 第一人稱視角' : '🎥 3/4 斜角視角';
+    if (this.isometricMode) {
+      this.releasePointerIfLocked();
+      this.showToast('🎥 已切換至「3/4 斜角俯視 RPG 概念圖視角」！按 [V] 可隨時切回第一人稱');
+    } else {
+      this.showToast('🚶 已切回「第一人稱街頭漫步視角」');
+    }
   }
 
   private triggerInteract(): void {
@@ -1067,12 +1109,42 @@ export class GameController {
       this.playerPos.y = THREE.MathUtils.lerp(this.playerPos.y, groundY, Math.min(1, dt * 15));
     }
 
-    // Subtle walking head-bob
+    // Subtle walking head-bob or 3/4 Isometric RPG Camera Follow
     const isMoving = moveDir.lengthSq() > 0.01 && this.isGrounded;
     const bobOffset = isMoving ? Math.sin(elapsed * (sprinting ? 13 : 9)) * 0.032 : 0;
 
-    this.camera.position.set(this.playerPos.x, this.playerPos.y + bobOffset, this.playerPos.z);
-    this.camera.rotation.set(this.pitch, this.yaw, 0);
+    if (this.isometricMode && !this.isSeated) {
+      this.playerAvatar.visible = true;
+      this.playerAvatar.position.set(this.playerPos.x, this.playerPos.y - 1.65, this.playerPos.z);
+      if (isMoving) {
+        this.playerAvatar.rotation.y = Math.atan2(-moveDir.x, -moveDir.z);
+      } else {
+        this.playerAvatar.rotation.y = this.yaw;
+      }
+      const swing = isMoving ? Math.sin(elapsed * 9) * 0.52 : 0;
+      const lLeg = this.playerAvatar.getObjectByName('leftLegPivot');
+      const rLeg = this.playerAvatar.getObjectByName('rightLegPivot');
+      const lArm = this.playerAvatar.getObjectByName('leftArmPivot');
+      const rArm = this.playerAvatar.getObjectByName('rightArmPivot');
+      if (lLeg) lLeg.rotation.x = swing;
+      if (rLeg) rLeg.rotation.x = -swing;
+      if (lArm) lArm.rotation.x = -swing * 0.75;
+      if (rArm) rArm.rotation.x = swing * 0.75;
+
+      // 3/4 Isometric RPG Concept Art Camera View (angled overview of street & golden markers)
+      this.camera.fov = 46;
+      this.camera.updateProjectionMatrix();
+      this.camera.position.set(this.playerPos.x + 5.2, this.playerPos.y + 8.6, this.playerPos.z + 10.8);
+      this.camera.lookAt(this.playerPos.x - 1.2, this.playerPos.y - 0.35, this.playerPos.z - 2.5);
+    } else {
+      this.playerAvatar.visible = false;
+      if (this.camera.fov !== 68) {
+        this.camera.fov = 68;
+        this.camera.updateProjectionMatrix();
+      }
+      this.camera.position.set(this.playerPos.x, this.playerPos.y + bobOffset, this.playerPos.z);
+      this.camera.rotation.set(this.pitch, this.yaw, 0);
+    }
     this.heldRig.update(dt, elapsed, env.windStrength, isMoving);
   }
 

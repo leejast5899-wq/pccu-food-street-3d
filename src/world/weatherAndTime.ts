@@ -345,6 +345,21 @@ export class WeatherAndTimeSystem {
       flag.rotation.z = -this.currentWind * 0.22 * gust;
     });
 
+    // Animate RPG glowing golden interactive circle markers on the ground
+    this.world.goldenMarkers.forEach((marker, idx) => {
+      const ring = marker.getObjectByName('markerRing');
+      const diamond = marker.getObjectByName('markerDiamond');
+      if (ring) {
+        ring.rotation.z = elapsed * 0.65 + idx * 0.8;
+        const pulse = 0.94 + Math.sin(elapsed * 3.2 + idx) * 0.08;
+        ring.scale.set(pulse, pulse, 1);
+      }
+      if (diamond) {
+        diamond.rotation.y = elapsed * 2.1 + idx;
+        diamond.position.y = 0.48 + Math.sin(elapsed * 3.2 + idx) * 0.1;
+      }
+    });
+
     // Update rain particles around player
     const rainMat = this.rainPoints.material as THREE.PointsMaterial;
     rainMat.opacity = this.currentRain * 0.65;

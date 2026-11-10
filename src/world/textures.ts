@@ -47,10 +47,23 @@ export function createSignTexture(title: string, subtitle: string, bgColor: stri
   ctx.lineWidth = 14;
   ctx.strokeRect(7, 7, 1010, 306);
 
-  // Taiwanese lightbox border frame
+  // Taiwanese lightbox border frame + Warm Marquee Bulb-Lit Perimeter Dots
   ctx.strokeStyle = accentColor;
   ctx.lineWidth = 10;
   ctx.strokeRect(22, 22, 980, 276);
+
+  // Warm tungsten bulb-lit border dots (matching "written in bright warm bulb-lit signage")
+  for (let bx = 46; bx <= 980; bx += 44) {
+    for (const by of [22, 298]) {
+      ctx.beginPath();
+      ctx.arc(bx, by, 7, 0, Math.PI * 2);
+      ctx.fillStyle = '#fffbeb';
+      ctx.shadowColor = '#f59e0b';
+      ctx.shadowBlur = 10;
+      ctx.fill();
+    }
+  }
+  ctx.shadowBlur = 0;
 
   ctx.strokeStyle = 'rgba(255,255,255,0.34)';
   ctx.lineWidth = 3;
@@ -221,7 +234,121 @@ export function createSevenElevenSignTexture(): THREE.CanvasTexture {
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.font = '900 46px "Noto Sans TC", sans-serif';
-  ctx.fillText('7-ELEVEN 光華山仔后門市', 384, 190);
+  ctx.fillText('7-ELEVEN 文學門市・文思文具行', 384, 190);
+
+  return finalizeTexture(canvas);
+}
+
+/**
+ * Handwritten Sidewalk Chalkboard Sign Texture (手寫木框小黑板立牌)
+ */
+export function createChalkboardSignTexture(title: string, line1: string, line2: string): THREE.CanvasTexture {
+  const { canvas, ctx } = makeCanvas(384, 512);
+  // Slate blackboard surface
+  ctx.fillStyle = '#1e242b';
+  ctx.fillRect(0, 0, 384, 512);
+
+  // Dusty chalk smudge grain
+  for (let i = 0; i < 1600; i++) {
+    ctx.fillStyle = 'rgba(255,255,255,0.03)';
+    ctx.fillRect(Math.random() * 384, Math.random() * 512, 3, 3);
+  }
+
+  // Warm wooden frame border
+  ctx.strokeStyle = '#8b5a2b';
+  ctx.lineWidth = 24;
+  ctx.strokeRect(12, 12, 360, 488);
+
+  // Hand-drawn dashed chalk border
+  ctx.strokeStyle = '#fde68a';
+  ctx.lineWidth = 3;
+  ctx.setLineDash([10, 8]);
+  ctx.strokeRect(34, 34, 316, 444);
+  ctx.setLineDash([]);
+
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#fca5a5';
+  ctx.font = '900 30px "Noto Sans TC", sans-serif';
+  ctx.fillText('★ TODAY SPECIAL ★', 192, 82);
+
+  ctx.fillStyle = '#fef08a';
+  ctx.font = '900 40px "Noto Sans TC", sans-serif';
+  ctx.fillText(title.slice(0, 7), 192, 146);
+
+  // Cute chalk divider wave
+  ctx.strokeStyle = '#93c5fd';
+  ctx.lineWidth = 4;
+  ctx.beginPath();
+  ctx.moveTo(64, 192);
+  ctx.lineTo(320, 192);
+  ctx.stroke();
+
+  ctx.fillStyle = '#f8fafc';
+  ctx.font = '700 28px "Noto Sans TC", sans-serif';
+  ctx.fillText(line1, 192, 260);
+  ctx.fillStyle = '#86efac';
+  ctx.fillText(line2, 192, 326);
+
+  ctx.fillStyle = '#fdba74';
+  ctx.font = '800 26px "Noto Sans TC", sans-serif';
+  ctx.fillText('歡迎內用 / 外帶 [按 E]', 192, 418);
+
+  return finalizeTexture(canvas);
+}
+
+/**
+ * Glowing Interactive Golden Circle Marker Texture ("glowing interactive golden circle marker on the entryway")
+ */
+export function createGoldenMarkerTexture(): THREE.CanvasTexture {
+  const { canvas, ctx } = makeCanvas(512, 512);
+  ctx.clearRect(0, 0, 512, 512);
+
+  const cx = 256;
+  const cy = 256;
+
+  // Soft warm golden radial aura
+  const aura = ctx.createRadialGradient(cx, cy, 30, cx, cy, 245);
+  aura.addColorStop(0, 'rgba(251, 191, 36, 0.28)');
+  aura.addColorStop(0.62, 'rgba(245, 158, 11, 0.18)');
+  aura.addColorStop(0.84, 'rgba(254, 240, 138, 0.65)');
+  aura.addColorStop(0.95, 'rgba(245, 158, 11, 0.85)');
+  aura.addColorStop(1, 'rgba(245, 158, 11, 0)');
+  ctx.fillStyle = aura;
+  ctx.beginPath();
+  ctx.arc(cx, cy, 245, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Outer crisp glowing golden ring
+  ctx.strokeStyle = '#fef08a';
+  ctx.lineWidth = 10;
+  ctx.shadowColor = '#f59e0b';
+  ctx.shadowBlur = 18;
+  ctx.beginPath();
+  ctx.arc(cx, cy, 224, 0, Math.PI * 2);
+  ctx.stroke();
+
+  // Segmented inner RPG quest rune ring
+  ctx.strokeStyle = '#fbbf24';
+  ctx.lineWidth = 6;
+  ctx.setLineDash([28, 16]);
+  ctx.beginPath();
+  ctx.arc(cx, cy, 184, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // 4 Cardinal diamond markers
+  for (let a = 0; a < 4; a++) {
+    const ang = (a * Math.PI) / 2;
+    const dx = cx + Math.cos(ang) * 204;
+    const dy = cy + Math.sin(ang) * 204;
+    ctx.save();
+    ctx.translate(dx, dy);
+    ctx.rotate(ang + Math.PI / 4);
+    ctx.fillStyle = '#fffbeb';
+    ctx.fillRect(-10, -10, 20, 20);
+    ctx.restore();
+  }
 
   return finalizeTexture(canvas);
 }

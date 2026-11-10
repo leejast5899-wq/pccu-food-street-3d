@@ -6,12 +6,14 @@ import {
   createAsphaltRoughnessMap,
   createAsphaltTexture,
   createCeilingGridTexture,
+  createChalkboardSignTexture,
   createCorrugatedMetalTexture,
   createDahongpaoBaseballCalendarTexture,
   createDahongpaoCounterFrontTexture,
   createDahongpaoInteriorWallMenuTexture,
   createDahongpaoLanternTexture,
   createDahongpaoSevenFlavorsBannerTexture,
+  createGoldenMarkerTexture,
   createMenuBoardTexture,
   createSevenElevenSignTexture,
   createShopInteriorTexture,
@@ -65,6 +67,7 @@ export interface AnimatedWorldRefs {
   cityLightsGroup: THREE.Group;
   asphaltMaterial: THREE.MeshStandardMaterial;
   steamEmitters: SteamEmitter[];
+  goldenMarkers: THREE.Group[];
 }
 
 export interface BuiltAlley {
@@ -101,6 +104,42 @@ export function buildGuanghuaAlley(parentScene: THREE.Scene): BuiltAlley {
   const streetLampLights: THREE.PointLight[] = [];
   const streetLampBulbs: THREE.MeshStandardMaterial[] = [];
   const steamEmitters: SteamEmitter[] = [];
+  const goldenMarkers: THREE.Group[] = [];
+  const goldenMarkerTex = createGoldenMarkerTexture();
+
+  const addGoldenMarker = (wx: number, wy: number, wz: number, scale = 1.65) => {
+    const mGroup = new THREE.Group();
+    mGroup.position.set(wx, wy, wz);
+
+    const ringMat = new THREE.MeshBasicMaterial({
+      map: goldenMarkerTex,
+      transparent: true,
+      opacity: 0.92,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+    });
+    const ringMesh = new THREE.Mesh(new THREE.PlaneGeometry(scale, scale), ringMat);
+    ringMesh.rotation.x = -Math.PI / 2;
+    ringMesh.position.y = 0.025;
+    ringMesh.name = 'markerRing';
+
+    const diamondMat = new THREE.MeshStandardMaterial({
+      color: 0xfef08a,
+      emissive: new THREE.Color(0xf59e0b),
+      emissiveIntensity: 1.1,
+      roughness: 0.2,
+      metalness: 0.4,
+    });
+    const diamond = new THREE.Mesh(new THREE.OctahedronGeometry(0.13, 0), diamondMat);
+    diamond.scale.set(0.85, 1.35, 0.85);
+    diamond.position.y = 0.48;
+    diamond.name = 'markerDiamond';
+
+    mGroup.add(ringMesh, diamond);
+    scene.add(mGroup);
+    goldenMarkers.push(mGroup);
+  };
 
   // Shared PBR materials
   const asphaltTex = createAsphaltTexture();
@@ -270,6 +309,8 @@ export function buildGuanghuaAlley(parentScene: THREE.Scene): BuiltAlley {
         metalMat,
         steelMat,
       });
+      // Glowing Golden Interactive Circle Marker on cobblestone/asphalt entryway of 大紅袍
+      addGoldenMarker(-3.35, 0.02, -1.65, 1.85);
       return;
     }
 
@@ -706,8 +747,143 @@ export function buildGuanghuaAlley(parentScene: THREE.Scene): BuiltAlley {
     shopGroup.add(flag);
     flags.push(flag);
 
+    // =========================================================================
+    // Cozy Stylized 3D RPG Storefront Props (Chalkboard, Potted Flowers, Ivy, Barrels, 2F Balcony)
+    // =========================================================================
+    // 1. Glowing Golden Interactive Circle Marker on the entryway
+    addGoldenMarker(frontX + faceDir * 2.9, 0.02, shop.z, 1.75);
+
+    // 2. Handwritten Wooden A-Frame Chalkboard Sign on sidewalk
+    const chalkTex = createChalkboardSignTexture(
+      shop.signText,
+      shop.menuLines[0] || '人氣招牌特餐',
+      shop.menuLines[1] || '現點現做超暖胃'
+    );
+    const chalkGroup = new THREE.Group();
+    chalkGroup.position.set(frontX + faceDir * 1.25, 0.14, 2.55);
+    chalkGroup.rotation.y = isLeft ? 0.42 : -0.42;
+    const chalkBoardA = new THREE.Mesh(
+      new THREE.BoxGeometry(0.06, 0.86, 0.56),
+      new THREE.MeshStandardMaterial({ map: chalkTex, roughness: 0.72 })
+    );
+    chalkBoardA.position.set(0, 0.42, 0);
+    chalkBoardA.rotation.z = faceDir * -0.14;
+    chalkGroup.add(chalkBoardA);
+    shopGroup.add(chalkGroup);
+
+    // 3. Terracotta Flower Pots with Vibrant Blossoms & Wooden Barrel / Crate Clutter
+    const potMat = new THREE.MeshStandardMaterial({ color: 0xb45309, roughness: 0.78 });
+    const leafClusterMat = new THREE.MeshStandardMaterial({ color: 0x15803d, roughness: 0.75 });
+    const flowerColors = [0xf43f5e, 0xfbbf24, 0xa855f7, 0xf97316];
+    const flowerPot = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.16, 0.32, 10), potMat);
+    flowerPot.position.set(frontX + faceDir * 0.45, 0.3, -4.45);
+    const bush = new THREE.Mesh(new THREE.SphereGeometry(0.26, 10, 8), leafClusterMat);
+    bush.position.set(frontX + faceDir * 0.45, 0.54, -4.45);
+    const blossom = new THREE.Mesh(
+      new THREE.SphereGeometry(0.11, 8, 8),
+      new THREE.MeshStandardMaterial({
+        color: flowerColors[idx % flowerColors.length],
+        emissive: new THREE.Color(flowerColors[idx % flowerColors.length]),
+        emissiveIntensity: 0.25,
+      })
+    );
+    blossom.position.set(frontX + faceDir * 0.52, 0.68, -4.42);
+    shopGroup.add(flowerPot, bush, blossom);
+
+    // Weathered wooden barrel & crate next to pillar
+    const barrelMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.24, 0.64, 12), woodMat);
+    barrelMesh.position.set(frontX + faceDir * 0.38, 0.46, 4.45);
+    const crateMesh = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.42, 0.46), woodMat);
+    crateMesh.position.set(frontX + faceDir * 0.35, 0.35, 3.85);
+    shopGroup.add(barrelMesh, crateMesh);
+
+    // 4. Climbing Ivy Vines on Storefront Pillar & 2F Plant-Filled Balcony Planter
+    for (let iv = 0; iv < 5; iv++) {
+      const ivyLeaf = new THREE.Mesh(new THREE.SphereGeometry(0.16 - iv * 0.015, 8, 6), leafClusterMat);
+      ivyLeaf.scale.set(0.6, 1.3, 0.9);
+      ivyLeaf.position.set(
+        frontX + faceDir * 0.22,
+        1.45 + iv * 0.42,
+        -4.65 + Math.sin(iv * 1.4) * 0.22
+      );
+      shopGroup.add(ivyLeaf);
+    }
+
+    const balconyPlanter = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.32, 3.2), woodMat);
+    balconyPlanter.position.set(wallX + faceDir * 2.38, 4.12, 0);
+    const balconyGreenery = new THREE.Mesh(new THREE.BoxGeometry(0.54, 0.28, 3.1), leafClusterMat);
+    balconyGreenery.position.set(wallX + faceDir * 2.42, 4.35, 0);
+    shopGroup.add(balconyPlanter, balconyGreenery);
+
+    // Neighboring Map Sub-Sign for 媽媽樂早餐 next to 大Q麵店 (z = 15.5, left side)
+    if (shop.id === 'beef-noodle') {
+      const mamaTex = createVerticalSignTexture('媽媽樂早餐', '#ea580c', '#fef08a');
+      const mamaMat = new THREE.MeshStandardMaterial({
+        map: mamaTex,
+        emissive: new THREE.Color(0xffffff),
+        emissiveMap: mamaTex,
+        emissiveIntensity: 0.6,
+        roughness: 0.3,
+      });
+      emissiveSignMaterials.push(mamaMat);
+      const mamaSign = new THREE.Mesh(new THREE.BoxGeometry(0.88, 2.35, 0.22), mamaMat);
+      mamaSign.position.set(frontX + faceDir * 1.75, 4.65, -5.2);
+      shopGroup.add(mamaSign);
+    }
+
     scene.add(shopGroup);
   });
+
+  // =========================================================================
+  // 3B. Real Google Map Cross-Alley: 「華岡路47巷2弄」&「華岡路47巷」Vista (Right side z = 7.8)
+  // =========================================================================
+  const crossAlleyGroup = new THREE.Group();
+  crossAlleyGroup.position.set(8.2, 0, 7.8);
+
+  // Sloped cobblestone/stepped side alley leading toward 好吃炒飯 / 大學城 / 8鍋文大店
+  for (let st = 0; st < 5; st++) {
+    const stepSlab = new THREE.Mesh(
+      new THREE.BoxGeometry(1.8, 0.16, 3.2),
+      new THREE.MeshStandardMaterial({ color: 0x64748b, roughness: 0.85 })
+    );
+    stepSlab.position.set(0.8 + st * 1.65, 0.08 + st * 0.14, 0);
+    crossAlleyGroup.add(stepSlab);
+  }
+
+  // Blue Taipei Street Signpost: "華岡路47巷2弄"
+  const lane47SignTex = createStreetSignTexture('華岡路47巷2弄', '好吃炒飯・大學城・8鍋 ↑', false);
+  const lane47Post = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.055, 2.9, 8), steelMat);
+  lane47Post.position.set(-1.65, 1.45, 2.1);
+  const lane47Plate = new THREE.Mesh(
+    new THREE.BoxGeometry(1.68, 0.72, 0.08),
+    new THREE.MeshStandardMaterial({ map: lane47SignTex, roughness: 0.4 })
+  );
+  lane47Plate.position.set(-1.65, 2.75, 2.1);
+  lane47Plate.rotation.y = -Math.PI / 2;
+  crossAlleyGroup.add(lane47Post, lane47Plate);
+
+  // Layered Glowing Neon Signs inside 華岡路47巷2弄 (好吃炒飯, 大學城美食, 8鍋文大店)
+  const sideAlleySigns = [
+    { text: '好吃炒飯', bg: '#ea580c', accent: '#fef08a', x: 2.2, y: 4.5, z: -1.1 },
+    { text: '大學城美食', bg: '#0284c7', accent: '#e0f2fe', x: 4.2, y: 5.1, z: 1.0 },
+    { text: '8鍋文大店', bg: '#b91c1c', accent: '#fde68a', x: 6.2, y: 5.6, z: -0.8 },
+  ];
+  sideAlleySigns.forEach((s) => {
+    const st = createVerticalSignTexture(s.text, s.bg, s.accent);
+    const sm = new THREE.MeshStandardMaterial({
+      map: st,
+      emissive: new THREE.Color(0xffffff),
+      emissiveMap: st,
+      emissiveIntensity: 0.68,
+      roughness: 0.3,
+    });
+    emissiveSignMaterials.push(sm);
+    const sb = new THREE.Mesh(new THREE.BoxGeometry(0.92, 2.5, 0.22), sm);
+    sb.position.set(s.x, s.y, s.z);
+    sb.rotation.y = -Math.PI / 2;
+    crossAlleyGroup.add(sb);
+  });
+  scene.add(crossAlleyGroup);
 
   // Main continuous building walls behind sidewalks (carved open at z = -4.25..4.25 for 大紅袍 walk-in interior!)
   colliders.push({ minX: -14, maxX: -6.35, minZ: -31, maxZ: -4.25 });
@@ -898,10 +1074,11 @@ export function buildGuanghuaAlley(parentScene: THREE.Scene): BuiltAlley {
   interactables.push({
     id: 'trivia-atm',
     kind: 'trivia',
-    label: '找 7-11 門口的【熱心學長姐】接委託賺飯錢',
+    label: '找 7-11 文學門市【熱心學長姐】接委託賺飯錢',
     position: new THREE.Vector3(5.0, 1.2, -28.1),
     radius: 3.0,
   });
+  addGoldenMarker(4.6, 0.02, -28.1, 1.8);
 
   // 7. 山仔后台北盆地景觀平台 (z = -31 to -43)
   const deckGeo = new THREE.BoxGeometry(15.2, 0.3, 14);
@@ -1050,6 +1227,7 @@ export function buildGuanghuaAlley(parentScene: THREE.Scene): BuiltAlley {
       cityLightsGroup,
       asphaltMaterial: asphaltMat,
       steamEmitters,
+      goldenMarkers,
     },
   };
 }
