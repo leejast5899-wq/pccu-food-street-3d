@@ -19,8 +19,10 @@ export interface StudentNPC {
 
 export class StudentNPCManager {
   public npcs: StudentNPC[] = [];
+  public group = new THREE.Group();
 
   constructor(scene: THREE.Scene) {
+    scene.add(this.group);
     const configs = [
       { x: -2.2, z: 10, minZ: -20, maxZ: 22, shirt: '#3b82f6', hair: '#1e1b4b', dIdx: 0 },
       { x: 2.3, z: -4, minZ: -26, maxZ: 20, shirt: '#10b981', hair: '#451a03', dIdx: 1 },
@@ -60,7 +62,7 @@ export class StudentNPCManager {
       person.add(umbrella);
 
       person.position.set(cfg.x, 0, cfg.z);
-      scene.add(person);
+      this.group.add(person);
 
       const dlg = NPC_STUDENT_DIALOGUES[cfg.dIdx];
       this.npcs.push({

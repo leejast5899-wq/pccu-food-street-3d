@@ -55,6 +55,7 @@ export interface AnimatedWorldRefs {
 }
 
 export interface BuiltAlley {
+  rootGroup: THREE.Group;
   colliders: AABB[];
   interactables: Interactable[];
   animated: AnimatedWorldRefs;
@@ -68,7 +69,10 @@ export function getGroundHeight(z: number): number {
   return t * 0.22;
 }
 
-export function buildGuanghuaAlley(scene: THREE.Scene): BuiltAlley {
+export function buildGuanghuaAlley(parentScene: THREE.Scene): BuiltAlley {
+  const rootGroup = new THREE.Group();
+  parentScene.add(rootGroup);
+  const scene = rootGroup;
   const colliders: AABB[] = [];
   const interactables: Interactable[] = [];
   const lanterns: THREE.Group[] = [];
@@ -775,6 +779,7 @@ export function buildGuanghuaAlley(scene: THREE.Scene): BuiltAlley {
   scene.add(cityLightsGroup);
 
   return {
+    rootGroup,
     colliders,
     interactables,
     getGroundHeight,

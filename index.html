@@ -8,6 +8,21 @@
   <body>
     <div id="app">
       <canvas id="game-canvas"></canvas>
+      <div id="google-map3d-container" class="hidden"></div>
+
+      <!-- Google 3D Map Quick Camera Bar (visible in map3d mode) -->
+      <div id="google-map3d-controls" class="hud-panel hidden">
+        <button id="btn-map3d-alley" class="chip-btn">🏘️ 光華路26巷平視</button>
+        <button id="btn-map3d-campus" class="chip-btn">🏫 文化大學鳥瞰</button>
+        <button id="btn-map3d-basin" class="chip-btn">🌃 台北盆地方向</button>
+        <button id="btn-map3d-back" class="chip-btn">🚶 切回步行模式</button>
+      </div>
+
+      <!-- Google 3D Tiles Mandatory Attribution Footer -->
+      <div id="google-attribution-bar" class="hidden">
+        <span class="google-wordmark">Google</span>
+        <span id="google-attribution-text">Map data © Google</span>
+      </div>
 
       <!-- Spicy / Cold / Rain Screen Vignette Effects -->
       <div id="screen-fx-layer">
@@ -65,6 +80,7 @@
 
       <!-- Top Right Quick Controls -->
       <div id="hud-quick-actions" class="hud-panel">
+        <button id="btn-real-3d" class="chip-btn" title="Google 地圖 1:1 實景設定 [G]">🌍 Google 1:1 實景</button>
         <button id="btn-time" class="chip-btn" title="切換時段 [1]">🕒 時段</button>
         <button id="btn-weather" class="chip-btn" title="切換陽明山天候 [2]">🌫️ 天氣</button>
         <button id="btn-umbrella" class="chip-btn" title="撐傘 / 收傘 [U]">☂️ 雨傘</button>
@@ -166,6 +182,65 @@
           </div>
           <div id="trivia-body" class="trivia-body"></div>
         </section>
+
+        <!-- Google Maps 1:1 3D Settings Modal -->
+        <section id="gmaps-modal" class="modal-card hidden">
+          <div class="modal-header">
+            <div>
+              <span class="modal-tag">方案一 ・ Google Maps Platform 1:1 實景整合</span>
+              <h2>連接 Google 地圖 1:1 3D 文化大學美食街</h2>
+              <p class="shop-quote">
+                輸入你的 Google Maps API Key（僅儲存在本機瀏覽器），即可切換為真實 1:1 陽明山文化大學與光華路26巷！
+              </p>
+            </div>
+            <button id="close-gmaps-modal" class="icon-close">✕</button>
+          </div>
+
+          <div class="gmaps-form">
+            <label for="input-gmaps-key" class="gmaps-label">Google Maps API Key</label>
+            <div class="gmaps-key-row">
+              <input
+                id="input-gmaps-key"
+                type="password"
+                placeholder="貼上 Maps Demo Key 或 Google Cloud API Key..."
+                autocomplete="off"
+              />
+              <button id="btn-toggle-key-vis" class="chip-btn" type="button">👁️ 顯示</button>
+            </div>
+            <p class="gmaps-help">
+              💡 <strong>免綁信用卡快速體驗</strong>：前往
+              <a
+                href="https://mapsplatform.google.com/maps-demo-key?utm_campaign=gmp_git_agentskills_v1"
+                target="_blank"
+                rel="noopener noreferrer"
+              >Google Maps Demo Key 頁面</a>
+              登入 Google 帳號按一下取得 Demo Key，即可啟用下方的「Google 3D 實景地圖模式」。若需自建正式 Key，請到
+              <a
+                href="https://console.cloud.google.com/google/maps-apis/credentials?utm_campaign=gmp_git_agentskills_v1"
+                target="_blank"
+                rel="noopener noreferrer"
+              >Google Cloud Credentials</a>
+              並務必設定 HTTP Referrer 網域白名單限制。
+            </p>
+
+            <div class="gmaps-mode-grid">
+              <button id="btn-mode-map3d" class="mode-card-btn" type="button">
+                <strong>🌍 Google 3D 實景地圖（推薦先試・支援免費 Demo Key）</strong>
+                <span>載入真實 1:1 文化大學＆光華路26巷衛星 3D 建築群，透過 Places API 即時定位名店地標，點擊地標直接點餐！</span>
+              </button>
+              <button id="btn-mode-3dtiles" class="mode-card-btn" type="button">
+                <strong>🚶 Three.js 1:1 Google 3D Tiles 第一人稱漫步</strong>
+                <span>需啟用「Map Tiles API」的正式 Cloud Key：直接走進真實 1:1 地形斜坡，保留 WASD 散步、陽明山霧雨與手上美食！</span>
+              </button>
+              <button id="btn-mode-alley" class="mode-card-btn" type="button">
+                <strong>🏘️ 離線街景模式（免 API Key）</strong>
+                <span>使用內建的光華路26巷街景（明天帶實景照片回來就能直接升級這區的門面貼圖！）</span>
+              </button>
+            </div>
+
+            <div id="gmaps-status-msg" class="gmaps-status hidden"></div>
+          </div>
+        </section>
       </div>
 
       <!-- Start / Pause Welcome Screen -->
@@ -181,15 +256,16 @@
 
           <div class="start-features">
             <div class="feat">🚶 <strong>第一人稱街景</strong><span>WASD 散步＋滑鼠看招牌、坐板凳吃麵</span></div>
-            <div class="feat">🍲 <strong>六大代表店家</strong><span>18 種在地餐點＋免費大骨/柴魚清湯</span></div>
+            <div class="feat">🌍 <strong>Google 1:1 3D 實景</strong><span>支援 Maps Demo Key 3D 空拍地標與 3D Tiles 步行</span></div>
             <div class="feat">🌫️ <strong>陽明山實時氣候</strong><span>一鍵切換晴午／黃昏／夜市／白牆大霧／強風雨</span></div>
           </div>
 
           <div class="start-actions">
             <button id="btn-start-game" class="primary-btn">進入光華路26巷（鎖定滑鼠視角）</button>
-            <button id="btn-start-unlocked" class="secondary-btn">以拖曳滑鼠模式開始（免鎖定）</button>
+            <button id="btn-start-unlocked" class="secondary-btn">拖曳滑鼠模式開始</button>
+            <button id="btn-start-google3d" class="secondary-btn">🌍 設定 Google 1:1 3D 地圖</button>
           </div>
-          <p class="start-footnote">提示：若滑鼠鎖定時按 <kbd>Esc</kbd> 可隨時呼叫游標或點擊選單；按 <kbd>E</kbd> 可與老闆、同學和路邊板凳互動。</p>
+          <p class="start-footnote">提示：進入後隨時可按 <kbd>G</kbd> 或右上角「🌍 Google 1:1 實景」切換真實地圖／街景模式。</p>
         </div>
       </div>
     </div>

@@ -835,3 +835,151 @@ kbd {
   font-size: 12px;
   color: var(--text-muted);
 }
+
+
+/* Google Maps 3D Mode Container (CF2: explicit full viewport height/width) */
+#google-map3d-container {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 4;
+  background: #0d1017;
+}
+
+#google-map3d-controls {
+  bottom: 52px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 8px 10px;
+  border-radius: 999px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  z-index: 25;
+}
+
+#google-attribution-bar {
+  position: fixed;
+  left: 12px;
+  bottom: 48px;
+  z-index: 24;
+  background: rgba(15, 17, 24, 0.78);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  padding: 4px 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: calc(100vw - 280px);
+  font-size: 11px;
+  color: #e2e8f0;
+  pointer-events: none;
+}
+
+.google-wordmark {
+  font-weight: 800;
+  letter-spacing: 0.2px;
+  color: #ffffff;
+}
+
+/* Google Maps Settings Modal */
+.gmaps-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.gmaps-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--accent-gold);
+}
+
+.gmaps-key-row {
+  display: flex;
+  gap: 8px;
+}
+
+#input-gmaps-key {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: #fff;
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 14px;
+  outline: none;
+  user-select: text;
+}
+
+#input-gmaps-key:focus {
+  border-color: var(--accent-warm);
+}
+
+.gmaps-help {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text-muted);
+}
+
+.gmaps-help a {
+  color: #7dd3fc;
+  text-decoration: underline;
+}
+
+.gmaps-mode-grid {
+  display: grid;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.mode-card-btn {
+  text-align: left;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 14px;
+  padding: 13px 15px;
+  color: #fff;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.mode-card-btn:hover {
+  border-color: var(--accent-warm);
+  background: rgba(255, 157, 66, 0.15);
+}
+
+.mode-card-btn.active {
+  border-color: var(--accent-green);
+  background: rgba(79, 214, 140, 0.14);
+}
+
+.mode-card-btn strong {
+  display: block;
+  font-size: 14.5px;
+  margin-bottom: 4px;
+}
+
+.mode-card-btn span {
+  display: block;
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+
+.gmaps-status {
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 13px;
+  background: rgba(56, 189, 248, 0.14);
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  color: #e0f2fe;
+}
+
+.gmaps-status.error {
+  background: rgba(239, 68, 68, 0.18);
+  border-color: rgba(239, 68, 68, 0.45);
+  color: #fecaca;
+}

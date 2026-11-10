@@ -8,14 +8,20 @@ import {
   TRIVIA_QUESTIONS,
   TriviaQuestion,
 } from '../data/shops';
+import { Google3DTilesWorld } from '../maps/google3DTiles';
+import { GoogleMap3DController } from '../maps/googleMaps3D';
+import { getSavedGoogleMapsApiKey, saveGoogleMapsApiKey } from '../maps/googleMapsLoader';
 import { AABB, BuiltAlley, Interactable, buildGuanghuaAlley } from '../world/alleyBuilder';
 import { HeldItemRig } from '../world/heldItems';
 import { StudentNPC, StudentNPCManager } from '../world/npcs';
 import { WeatherAndTimeSystem } from '../world/weatherAndTime';
 
+type ViewMode = 'alley' | 'map3d' | '3dtiles';
+
 type ActiveTarget =
   | { source: 'world'; item: Interactable; distance: number }
-  | { source: 'npc'; npc: StudentNPC; distance: number };
+  | { source: 'npc'; npc: StudentNPC; distance: number }
+  | { source: 'tiles-shop'; shop: ShopConfig; distance: number };
 
 export class GameController {
   private canvas: HTMLCanvasElement;
@@ -27,7 +33,11 @@ export class GameController {
   private weatherTime: WeatherAndTimeSystem;
   private npcManager: StudentNPCManager;
   private heldRig: HeldItemRig;
+  private google3DTiles: Google3DTilesWorld;
+  private googleMap3D: GoogleMap3DController;
   private sound = new SoundEngine();
+
+  private viewMode: ViewMode = 'alley';
 
   // Player state
   private playerPos = new THREE.Vector3(0, 1.65, 22.8);
@@ -97,6 +107,13 @@ export class GameController {
   private elShopModal = document.getElementById('shop-modal')!;
   private elJournalModal = document.getElementById('journal-modal')!;
   private elTriviaModal = document.getElementById('trivia-modal')!;
+  private elGmapsModal = document.getElementById('gmaps-modal')!;
+  private elGoogleMap3DContainer = document.getElementById('google-map3d-container')!;
+  private elGoogleMap3DControls = document.getElementById('google-map3d-controls')!;
+  private elGoogleAttributionBar = document.getElementById('google-attribution-bar')!;
+  private elGoogleAttributionText = document.getElementById('google-attribution-text')!;
+  private elInputGmapsKey = document.getElementById('input-gmaps-key') as HTMLInputElement;
+  private elGmapsStatus = document.getElementById('gmaps-status-msg')!;
   private elStartOverlay = document.getElementById('start-overlay')!;
   private elPhotoExitHint = document.getElementById('photo-exit-hint')!;
   private elRainVignette = document.getElementById('rain-vignette')!;
@@ -117,7 +134,7 @@ export class GameController {
     this.renderer.toneMappingExposure = 1.08;
 
     this.scene = new THREE.Scene();
-    this.camera = new THREE.PerspectiveCamera(68, window.innerWidth / window.innerHeight, 0.08, 280);
+    this.camera = new THREE.PerspectiveCamera(68, window.innerWidth / window.innerHeight, 0.12, 4500);
     this.camera.rotation.order = 'YXZ';
     this.scene.add(this.camera);
 
@@ -125,6 +142,30 @@ export class GameController {
     this.weatherTime = new WeatherAndTimeSystem(this.scene, this.alley.animated);
     this.npcManager = new StudentNPCManager(this.scene);
     this.heldRig = new HeldItemRig(this.camera);
+
+    this.google3DTiles = new Google3DTilesWorld(
+      this.scene,
+      (originPos) => {
+        if (this.viewMode === '3dtiles') {
+          this.playerPos.copy(originPos);
+          this.isGrounded = true;
+          this.showToast('✅ 已對齊 Google 1:1 實景光華路26巷地形！WASD 可直接步行探索');
+        }
+      },
+      (errMsg) => {
+        this.showToast(errMsg);
+        this.setGmapsStatus(errMsg, true);
+      }
+    );
+
+    this.googleMap3D = new GoogleMap3DController(this.elGoogleMap3DContainer, {
+      onSelectShop: (shop) => {
+        this.openShopModal(shop);
+      },
+      onStatus: (msg) => {
+        this.showToast(msg);
+      },
+    });
 
     this.bindEvents();
     this.updateHUD();
@@ -150,6 +191,10 @@ export class GameController {
     });
     document.getElementById('btn-start-unlocked')!.addEventListener('click', () => {
       this.startGame(false);
+    });
+    document.getElementById('btn-start-google3d')!.addEventListener('click', () => {
+      this.startGame(false);
+      this.openGmapsModal();
     });
 
     // Pointer lock changes
@@ -245,6 +290,8 @@ export class GameController {
         this.cycleWeather();
       } else if (code === 'KeyJ') {
         this.toggleJournalModal();
+      } else if (code === 'KeyG') {
+        this.openGmapsModal();
       } else if (code === 'KeyP') {
         this.togglePhotoMode();
       } else if (code === 'KeyM') {
@@ -257,6 +304,10 @@ export class GameController {
     });
 
     // Top-right HUD quick action buttons
+    document.getElementById('btn-real-3d')!.addEventListener('click', () => {
+      this.sound.init();
+      this.openGmapsModal();
+    });
     document.getElementById('btn-time')!.addEventListener('click', () => {
       this.sound.init();
       this.cycleTime();
@@ -289,8 +340,37 @@ export class GameController {
     document.getElementById('close-shop-modal')!.addEventListener('click', () => this.closeAllModals());
     document.getElementById('close-journal-modal')!.addEventListener('click', () => this.closeAllModals());
     document.getElementById('close-trivia-modal')!.addEventListener('click', () => this.closeAllModals());
+    document.getElementById('close-gmaps-modal')!.addEventListener('click', () => this.closeAllModals());
     this.elModalBackdrop.addEventListener('click', (e) => {
       if (e.target === this.elModalBackdrop) this.closeAllModals();
+    });
+
+    // Google Maps 3D modal controls
+    document.getElementById('btn-toggle-key-vis')!.addEventListener('click', () => {
+      const isPwd = this.elInputGmapsKey.type === 'password';
+      this.elInputGmapsKey.type = isPwd ? 'text' : 'password';
+    });
+    document.getElementById('btn-mode-map3d')!.addEventListener('click', () => {
+      void this.handleSelectViewMode('map3d');
+    });
+    document.getElementById('btn-mode-3dtiles')!.addEventListener('click', () => {
+      void this.handleSelectViewMode('3dtiles');
+    });
+    document.getElementById('btn-mode-alley')!.addEventListener('click', () => {
+      void this.handleSelectViewMode('alley');
+    });
+
+    document.getElementById('btn-map3d-alley')!.addEventListener('click', () => {
+      this.googleMap3D.flyToAlleyStreet();
+    });
+    document.getElementById('btn-map3d-campus')!.addEventListener('click', () => {
+      this.googleMap3D.flyToCampusOverview();
+    });
+    document.getElementById('btn-map3d-basin')!.addEventListener('click', () => {
+      this.googleMap3D.flyToTaipeiBasin();
+    });
+    document.getElementById('btn-map3d-back')!.addEventListener('click', () => {
+      void this.switchViewMode('alley');
     });
 
     document.getElementById('tab-foods')!.addEventListener('click', () => {
@@ -387,6 +467,11 @@ export class GameController {
 
   private triggerInteract(): void {
     if (!this.activeTarget) return;
+
+    if (this.activeTarget.source === 'tiles-shop') {
+      this.openShopModal(this.activeTarget.shop);
+      return;
+    }
 
     if (this.activeTarget.source === 'npc') {
       const npc = this.activeTarget.npc;
@@ -508,6 +593,7 @@ export class GameController {
     this.elShopModal.classList.remove('hidden');
     this.elJournalModal.classList.add('hidden');
     this.elTriviaModal.classList.add('hidden');
+    this.elGmapsModal.classList.add('hidden');
   }
 
   private purchaseItem(item: MenuItem): void {
@@ -573,6 +659,7 @@ export class GameController {
     this.elJournalModal.classList.remove('hidden');
     this.elShopModal.classList.add('hidden');
     this.elTriviaModal.classList.add('hidden');
+    this.elGmapsModal.classList.add('hidden');
   }
 
   private renderJournal(): void {
@@ -654,6 +741,123 @@ export class GameController {
     this.elTriviaModal.classList.remove('hidden');
     this.elShopModal.classList.add('hidden');
     this.elJournalModal.classList.add('hidden');
+    this.elGmapsModal.classList.add('hidden');
+  }
+
+  private openGmapsModal(): void {
+    this.sound.playUiClick();
+    this.releasePointerIfLocked();
+    this.modalOpen = true;
+    this.keys.clear();
+
+    const saved = getSavedGoogleMapsApiKey();
+    if (!this.elInputGmapsKey.value && saved) {
+      this.elInputGmapsKey.value = saved;
+    }
+    this.updateModeButtonsUI();
+
+    this.elModalBackdrop.classList.remove('hidden');
+    this.elGmapsModal.classList.remove('hidden');
+    this.elShopModal.classList.add('hidden');
+    this.elJournalModal.classList.add('hidden');
+    this.elTriviaModal.classList.add('hidden');
+  }
+
+  private setGmapsStatus(msg: string, isError = false): void {
+    this.elGmapsStatus.textContent = msg;
+    this.elGmapsStatus.classList.remove('hidden');
+    this.elGmapsStatus.classList.toggle('error', isError);
+  }
+
+  private updateModeButtonsUI(): void {
+    document.getElementById('btn-mode-map3d')!.classList.toggle('active', this.viewMode === 'map3d');
+    document.getElementById('btn-mode-3dtiles')!.classList.toggle('active', this.viewMode === '3dtiles');
+    document.getElementById('btn-mode-alley')!.classList.toggle('active', this.viewMode === 'alley');
+  }
+
+  private async handleSelectViewMode(targetMode: ViewMode): Promise<void> {
+    if (targetMode === 'alley') {
+      await this.switchViewMode('alley');
+      this.closeAllModals();
+      return;
+    }
+
+    const enteredKey = this.elInputGmapsKey.value.trim() || getSavedGoogleMapsApiKey();
+    if (!enteredKey) {
+      this.setGmapsStatus('請先貼上 Google Maps API Key（可用免費 Maps Demo Key 體驗 Google 3D 實景地圖模式！）', true);
+      return;
+    }
+
+    const { changedAfterLoad } = saveGoogleMapsApiKey(enteredKey);
+    if (changedAfterLoad) {
+      this.setGmapsStatus('偵測到更換新的 API Key，正在重新載入頁面套用設定…');
+      setTimeout(() => window.location.reload(), 650);
+      return;
+    }
+
+    try {
+      this.setGmapsStatus('正在連線 Google Maps Platform 並定位文化大學光華路26巷…');
+      await this.switchViewMode(targetMode, enteredKey);
+      this.closeAllModals();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.setGmapsStatus(`載入失敗：${msg}`, true);
+    }
+  }
+
+  private async switchViewMode(targetMode: ViewMode, apiKey?: string): Promise<void> {
+    if (targetMode === 'alley') {
+      this.googleMap3D.unmount();
+      this.elGoogleMap3DContainer.classList.add('hidden');
+      this.elGoogleMap3DControls.classList.add('hidden');
+      this.elGoogleAttributionBar.classList.add('hidden');
+      this.google3DTiles.setVisible(false);
+      this.alley.rootGroup.visible = true;
+      this.npcManager.group.visible = true;
+      if (this.viewMode === '3dtiles') {
+        this.playerPos.set(0, 1.65, 22.8);
+      }
+      this.viewMode = 'alley';
+      this.elCrosshair.classList.toggle('hidden', this.photoMode);
+      this.updateModeButtonsUI();
+      this.showToast('🏘️ 已切換為離線街景模式');
+      return;
+    }
+
+    const key = apiKey || getSavedGoogleMapsApiKey();
+    if (!key) {
+      this.openGmapsModal();
+      return;
+    }
+
+    if (targetMode === 'map3d') {
+      this.releasePointerIfLocked();
+      this.google3DTiles.setVisible(false);
+      this.elGoogleAttributionBar.classList.add('hidden');
+      this.elCrosshair.classList.add('hidden');
+      this.elInteractPrompt.classList.add('hidden');
+      this.elGoogleMap3DContainer.classList.remove('hidden');
+      this.elGoogleMap3DControls.classList.remove('hidden');
+      this.viewMode = 'map3d';
+      this.updateModeButtonsUI();
+      await this.googleMap3D.mount(key);
+      return;
+    }
+
+    // targetMode === '3dtiles'
+    this.googleMap3D.unmount();
+    this.elGoogleMap3DContainer.classList.add('hidden');
+    this.elGoogleMap3DControls.classList.add('hidden');
+    this.alley.rootGroup.visible = false;
+    this.npcManager.group.visible = false;
+    this.elGoogleAttributionBar.classList.remove('hidden');
+    this.elCrosshair.classList.toggle('hidden', this.photoMode);
+    this.viewMode = '3dtiles';
+    this.updateModeButtonsUI();
+
+    await this.google3DTiles.mount(key);
+    this.google3DTiles.setVisible(true);
+    this.playerPos.set(0, 18, 0);
   }
 
   private closeAllModals(): void {
@@ -662,7 +866,8 @@ export class GameController {
     this.elShopModal.classList.add('hidden');
     this.elJournalModal.classList.add('hidden');
     this.elTriviaModal.classList.add('hidden');
-    if (this.preferPointerLock && this.started) {
+    this.elGmapsModal.classList.add('hidden');
+    if (this.preferPointerLock && this.started && this.viewMode !== 'map3d') {
       try {
         this.canvas.requestPointerLock();
       } catch {
@@ -739,7 +944,7 @@ export class GameController {
 
   private updatePlayerMovement(dt: number, elapsed: number): void {
     const env = this.weatherTime.getEnvInfo();
-    if (!this.started || this.modalOpen || this.isSeated) {
+    if (!this.started || this.modalOpen || this.isSeated || this.viewMode === 'map3d') {
       this.camera.position.copy(this.playerPos);
       this.camera.rotation.set(this.pitch, this.yaw, 0);
       this.heldRig.update(dt, elapsed, env.windStrength, false);
@@ -755,7 +960,14 @@ export class GameController {
 
     const sprinting = this.keys.has('ShiftLeft') || this.keys.has('ShiftRight');
     const windPenalty = this.umbrellaOpen && env.windStrength > 0.7 ? 0.82 : 1.0;
-    const baseSpeed = (sprinting ? 6.2 : 3.9) * windPenalty;
+    const baseSpeed =
+      (this.viewMode === '3dtiles'
+        ? sprinting
+          ? 10.5
+          : 5.2
+        : sprinting
+          ? 6.2
+          : 3.9) * windPenalty;
 
     const moveDir = new THREE.Vector3();
     if (forwardInput !== 0 || strafeInput !== 0) {
@@ -767,19 +979,32 @@ export class GameController {
       this.sound.playFootstep(sprinting);
     }
 
-    // Separate X and Z collision resolution for smooth sliding
-    const radius = 0.42;
-    const nextX = this.playerPos.x + moveDir.x * baseSpeed * dt;
-    if (!this.collidesWithWorld(nextX, this.playerPos.z, radius, this.alley.colliders)) {
-      this.playerPos.x = nextX;
-    }
-    const nextZ = this.playerPos.z + moveDir.z * baseSpeed * dt;
-    if (!this.collidesWithWorld(this.playerPos.x, nextZ, radius, this.alley.colliders)) {
-      this.playerPos.z = nextZ;
+    if (this.viewMode === '3dtiles') {
+      this.playerPos.x += moveDir.x * baseSpeed * dt;
+      this.playerPos.z += moveDir.z * baseSpeed * dt;
+    } else {
+      // Separate X and Z collision resolution for smooth sliding
+      const radius = 0.42;
+      const nextX = this.playerPos.x + moveDir.x * baseSpeed * dt;
+      if (!this.collidesWithWorld(nextX, this.playerPos.z, radius, this.alley.colliders)) {
+        this.playerPos.x = nextX;
+      }
+      const nextZ = this.playerPos.z + moveDir.z * baseSpeed * dt;
+      if (!this.collidesWithWorld(this.playerPos.x, nextZ, radius, this.alley.colliders)) {
+        this.playerPos.z = nextZ;
+      }
     }
 
-    // Gravity & ground height following (including 仇人坡 entrance ramp!)
-    const groundY = this.alley.getGroundHeight(this.playerPos.z) + 1.65;
+    // Gravity & ground height following (Google 3D Tiles raycast OR 仇人坡 ramp)
+    let groundY = this.playerPos.y;
+    if (this.viewMode === '3dtiles') {
+      const rayStartY = this.google3DTiles.loadedFirstTile ? this.playerPos.y + 3.0 : 250;
+      const tileGround = this.google3DTiles.sampleGroundHeight(this.playerPos.x, this.playerPos.z, rayStartY);
+      groundY = tileGround !== null ? tileGround + 1.65 : this.playerPos.y;
+    } else {
+      groundY = this.alley.getGroundHeight(this.playerPos.z) + 1.65;
+    }
+
     if (!this.isGrounded || this.playerPos.y > groundY + 0.01) {
       this.velocityY -= 14.5 * dt;
       this.playerPos.y += this.velocityY * dt;
@@ -816,7 +1041,7 @@ export class GameController {
   }
 
   private updateInteractables(): void {
-    if (!this.started || this.modalOpen || this.photoMode || this.isSeated) {
+    if (!this.started || this.modalOpen || this.photoMode || this.isSeated || this.viewMode === 'map3d') {
       this.activeTarget = null;
       this.elInteractPrompt.classList.add('hidden');
       this.elCrosshair.classList.remove('active');
@@ -827,27 +1052,44 @@ export class GameController {
     let bestScore = Infinity;
     let bestTarget: ActiveTarget | null = null;
 
-    for (const item of this.alley.interactables) {
-      const dx = item.position.x - this.playerPos.x;
-      const dz = item.position.z - this.playerPos.z;
-      const dist = Math.hypot(dx, dz);
-      if (dist <= item.radius) {
-        const dir = new THREE.Vector3(dx, 0, dz).normalize();
-        const dot = forward.dot(dir);
-        // Prefer items in front of camera
-        const score = dist - dot * 1.1;
-        if (score < bestScore) {
-          bestScore = score;
-          bestTarget = { source: 'world', item, distance: dist };
+    if (this.viewMode === '3dtiles') {
+      for (const m of this.google3DTiles.markers) {
+        const dx = m.position.x - this.playerPos.x;
+        const dz = m.position.z - this.playerPos.z;
+        const dist = Math.hypot(dx, dz);
+        if (dist <= 6.5) {
+          const dir = new THREE.Vector3(dx, 0, dz).normalize();
+          const dot = forward.dot(dir);
+          const score = dist - dot * 1.1;
+          if (score < bestScore) {
+            bestScore = score;
+            bestTarget = { source: 'tiles-shop', shop: m.shop, distance: dist };
+          }
         }
       }
-    }
+    } else {
+      for (const item of this.alley.interactables) {
+        const dx = item.position.x - this.playerPos.x;
+        const dz = item.position.z - this.playerPos.z;
+        const dist = Math.hypot(dx, dz);
+        if (dist <= item.radius) {
+          const dir = new THREE.Vector3(dx, 0, dz).normalize();
+          const dot = forward.dot(dir);
+          // Prefer items in front of camera
+          const score = dist - dot * 1.1;
+          if (score < bestScore) {
+            bestScore = score;
+            bestTarget = { source: 'world', item, distance: dist };
+          }
+        }
+      }
 
-    const nearNpc = this.npcManager.findNearest(this.playerPos, 2.7);
-    if (nearNpc) {
-      const dist = nearNpc.mesh.position.distanceTo(this.playerPos);
-      if (dist < bestScore) {
-        bestTarget = { source: 'npc', npc: nearNpc, distance: dist };
+      const nearNpc = this.npcManager.findNearest(this.playerPos, 2.7);
+      if (nearNpc) {
+        const dist = nearNpc.mesh.position.distanceTo(this.playerPos);
+        if (dist < bestScore) {
+          bestTarget = { source: 'npc', npc: nearNpc, distance: dist };
+        }
       }
     }
 
@@ -856,7 +1098,9 @@ export class GameController {
       const label =
         bestTarget.source === 'world'
           ? bestTarget.item.label
-          : `與【${bestTarget.npc.speaker}】聊天`;
+          : bestTarget.source === 'tiles-shop'
+            ? `向【${bestTarget.shop.name}】點餐`
+            : `與【${bestTarget.npc.speaker}】聊天`;
       this.elInteractLabel.textContent = label;
       this.elInteractPrompt.classList.remove('hidden');
       this.elCrosshair.classList.add('active');
@@ -893,13 +1137,25 @@ export class GameController {
 
     this.weatherTime.update(dt, elapsed, this.playerPos);
     const env = this.weatherTime.getEnvInfo();
-    this.npcManager.update(dt, elapsed, env.rainIntensity, env.windStrength, this.playerPos);
     this.sound.updateAmbience(env.windStrength, env.rainIntensity, this.umbrellaOpen);
 
-    this.updatePlayerMovement(dt, elapsed);
-    this.updateInteractables();
-    this.updateStatsSlowly(dt);
+    if (this.viewMode !== 'map3d') {
+      if (this.viewMode === 'alley') {
+        this.npcManager.update(dt, elapsed, env.rainIntensity, env.windStrength, this.playerPos);
+      } else if (this.viewMode === '3dtiles') {
+        this.google3DTiles.update(this.camera, this.renderer, elapsed);
+        if (Math.floor(elapsed * 2) !== Math.floor((elapsed - dt) * 2)) {
+          const attr = this.google3DTiles.getAttributionsText();
+          if (attr) {
+            this.elGoogleAttributionText.textContent = attr;
+          }
+        }
+      }
+      this.updatePlayerMovement(dt, elapsed);
+      this.updateInteractables();
+      this.renderer.render(this.scene, this.camera);
+    }
 
-    this.renderer.render(this.scene, this.camera);
+    this.updateStatsSlowly(dt);
   };
 }
