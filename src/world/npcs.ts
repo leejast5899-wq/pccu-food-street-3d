@@ -32,11 +32,12 @@ export class StudentNPCManager {
 
     configs.forEach((cfg, idx) => {
       const person = createStylizedPerson(cfg.shirt, '#f5d0b5', cfg.hair);
-      // Cute student backpack
+      // Sculpted rounded student backpack
       const bag = new THREE.Mesh(
-        new THREE.BoxGeometry(0.38, 0.46, 0.18),
-        new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.8 })
+        new THREE.CapsuleGeometry(0.14, 0.22, 8, 12),
+        new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.75 })
       );
+      bag.scale.set(1.15, 1, 0.65);
       bag.position.set(0, 1.08, -0.2);
       person.add(bag);
 
@@ -92,25 +93,41 @@ export class StudentNPCManager {
       }
 
       const distToPlayer = npc.mesh.position.distanceTo(playerPos);
-      if (distToPlayer < 2.6) {
-        // Politely pause and turn slightly toward player when close
-        const lookAngle = Math.atan2(
-          playerPos.x - npc.mesh.position.x,
-          playerPos.z - npc.mesh.position.z
-        );
-        npc.mesh.rotation.y = lookAngle;
-        return;
-      }
+      const limbs = npc.mesh.userData as {
+        leftLegPivot?: THREE.Group;
+        rightLegPivot?: THREE.Group;
+        leftArmPivot?: THREE.Group;
+        rightArmPivot?: THREE.Group;
+      };
 
-      if (npc.pauseTimer > 0) {
+      if (distToPlayer < 2.6 || npc.pauseTimer > 0) {
+        if (limbs.leftLegPivot) limbs.leftLegPivot.rotation.x = 0;
+        if (limbs.rightLegPivot) limbs.rightLegPivot.rotation.x = 0;
+        if (limbs.leftArmPivot) limbs.leftArmPivot.rotation.x = 0;
+        if (limbs.rightArmPivot) limbs.rightArmPivot.rotation.x = useUmbrella ? -0.55 : 0;
+
+        if (distToPlayer < 2.6) {
+          // Politely pause and turn slightly toward player when close
+          const lookAngle = Math.atan2(
+            playerPos.x - npc.mesh.position.x,
+            playerPos.z - npc.mesh.position.z
+          );
+          npc.mesh.rotation.y = lookAngle;
+          return;
+        }
         npc.pauseTimer -= dt;
         return;
       }
 
       npc.mesh.position.z += npc.direction * npc.speed * dt;
-      // Subtle walking bob
-      npc.mesh.position.y = Math.abs(Math.sin(elapsed * 6 + idx)) * 0.04;
+      // Natural walking stride swing for legs & arms
+      const stride = Math.sin(elapsed * 6.5 + idx * 1.3);
+      npc.mesh.position.y = Math.abs(stride) * 0.032;
       npc.mesh.rotation.y = npc.direction > 0 ? 0 : Math.PI;
+      if (limbs.leftLegPivot) limbs.leftLegPivot.rotation.x = stride * 0.48;
+      if (limbs.rightLegPivot) limbs.rightLegPivot.rotation.x = -stride * 0.48;
+      if (limbs.leftArmPivot) limbs.leftArmPivot.rotation.x = -stride * 0.36;
+      if (limbs.rightArmPivot) limbs.rightArmPivot.rotation.x = useUmbrella ? -0.55 : stride * 0.36;
 
       if (npc.mesh.position.z >= npc.maxZ) {
         npc.direction = -1;

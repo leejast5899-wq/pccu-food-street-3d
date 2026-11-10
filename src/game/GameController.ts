@@ -1,4 +1,9 @@
 import * as THREE from 'three';
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
+import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
+import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
+import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { SoundEngine } from '../audio/soundEngine';
 import {
   LANDMARKS,
@@ -26,6 +31,8 @@ type ActiveTarget =
 export class GameController {
   private canvas: HTMLCanvasElement;
   private renderer: THREE.WebGLRenderer;
+  private composer: EffectComposer;
+  private bloomPass: UnrealBloomPass;
   private scene: THREE.Scene;
   private camera: THREE.PerspectiveCamera;
 
@@ -131,12 +138,37 @@ export class GameController {
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.08;
+    this.renderer.toneMappingExposure = 0.90;
 
     this.scene = new THREE.Scene();
+
+    // Physically-based IBL environment reflections for stainless steel, wet asphalt, glass & scooters
+    const pmremGenerator = new THREE.PMREMGenerator(this.renderer);
+    pmremGenerator.compileEquirectangularShader();
+    const envRT = pmremGenerator.fromScene(new RoomEnvironment(), 0.04);
+    this.scene.environment = envRT.texture;
+    this.scene.environmentIntensity = 0.22;
+    pmremGenerator.dispose();
+
     this.camera = new THREE.PerspectiveCamera(68, window.innerWidth / window.innerHeight, 0.12, 4500);
     this.camera.rotation.order = 'YXZ';
     this.scene.add(this.camera);
+
+    // Post-processing pipeline with subtle cinematic UnrealBloom for Taiwanese neon signs & lanterns
+    this.composer = new EffectComposer(this.renderer);
+    this.composer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.composer.setSize(window.innerWidth, window.innerHeight);
+    const renderPass = new RenderPass(this.scene, this.camera);
+    this.bloomPass = new UnrealBloomPass(
+      new THREE.Vector2(window.innerWidth, window.innerHeight),
+      0.22, // strength
+      0.48, // radius
+      0.90  // threshold
+    );
+    const outputPass = new OutputPass();
+    this.composer.addPass(renderPass);
+    this.composer.addPass(this.bloomPass);
+    this.composer.addPass(outputPass);
 
     this.alley = buildGuanghuaAlley(this.scene);
     this.weatherTime = new WeatherAndTimeSystem(this.scene, this.alley.animated);
@@ -200,6 +232,7 @@ export class GameController {
       this.camera.aspect = window.innerWidth / window.innerHeight;
       this.camera.updateProjectionMatrix();
       this.renderer.setSize(window.innerWidth, window.innerHeight);
+      this.composer.setSize(window.innerWidth, window.innerHeight);
     });
 
     // Start buttons
@@ -1170,7 +1203,8 @@ export class GameController {
       }
       this.updatePlayerMovement(dt, elapsed);
       this.updateInteractables();
-      this.renderer.render(this.scene, this.camera);
+      this.bloomPass.strength = env.isDark ? 0.24 : 0.10;
+      this.composer.render();
     }
 
     this.updateStatsSlowly(dt);

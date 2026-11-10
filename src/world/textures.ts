@@ -8,10 +8,10 @@ function makeCanvas(width: number, height: number): { canvas: HTMLCanvasElement;
   return { canvas, ctx };
 }
 
-function finalizeTexture(canvas: HTMLCanvasElement, repeatX = 1, repeatY = 1): THREE.CanvasTexture {
+function finalizeTexture(canvas: HTMLCanvasElement, repeatX = 1, repeatY = 1, isDataMap = false): THREE.CanvasTexture {
   const tex = new THREE.CanvasTexture(canvas);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  tex.anisotropy = 4;
+  tex.colorSpace = isDataMap ? THREE.NoColorSpace : THREE.SRGBColorSpace;
+  tex.anisotropy = 8;
   if (repeatX !== 1 || repeatY !== 1) {
     tex.wrapS = THREE.RepeatWrapping;
     tex.wrapT = THREE.RepeatWrapping;
@@ -24,67 +24,127 @@ function finalizeTexture(canvas: HTMLCanvasElement, repeatX = 1, repeatY = 1): T
 export function createSignTexture(title: string, subtitle: string, bgColor: string, accentColor: string): THREE.CanvasTexture {
   const { canvas, ctx } = makeCanvas(1024, 320);
 
-  // Background gradient
+  // Acrylic lightbox backlit radial + linear gradient
   const grad = ctx.createLinearGradient(0, 0, 1024, 320);
   grad.addColorStop(0, bgColor);
-  grad.addColorStop(1, '#181414');
+  grad.addColorStop(0.5, bgColor);
+  grad.addColorStop(1, '#1a1212');
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, 1024, 320);
 
+  // Internal fluorescent tube glow bands inside acrylic sign
+  const tubeGlow = ctx.createLinearGradient(0, 40, 0, 280);
+  tubeGlow.addColorStop(0, 'rgba(255,255,255,0.06)');
+  tubeGlow.addColorStop(0.32, 'rgba(255,250,230,0.22)');
+  tubeGlow.addColorStop(0.5, 'rgba(255,255,255,0.08)');
+  tubeGlow.addColorStop(0.72, 'rgba(255,250,230,0.18)');
+  tubeGlow.addColorStop(1, 'rgba(0,0,0,0.25)');
+  ctx.fillStyle = tubeGlow;
+  ctx.fillRect(0, 0, 1024, 320);
+
+  // Outer metallic aluminum frame + corner bolts
+  ctx.strokeStyle = '#334155';
+  ctx.lineWidth = 14;
+  ctx.strokeRect(7, 7, 1010, 306);
+
   // Taiwanese lightbox border frame
   ctx.strokeStyle = accentColor;
-  ctx.lineWidth = 12;
-  ctx.strokeRect(18, 18, 988, 284);
+  ctx.lineWidth = 10;
+  ctx.strokeRect(22, 22, 980, 276);
 
-  ctx.strokeStyle = 'rgba(255,255,255,0.28)';
+  ctx.strokeStyle = 'rgba(255,255,255,0.34)';
   ctx.lineWidth = 3;
-  ctx.strokeRect(32, 32, 960, 256);
+  ctx.strokeRect(36, 36, 952, 248);
 
-  // Decorative side stamp
-  ctx.fillStyle = accentColor;
-  ctx.fillRect(58, 62, 18, 196);
-  ctx.fillRect(948, 62, 18, 196);
-
-  // Main Title
+  // Traditional seal stamp on left & phone/location badge on right
+  ctx.fillStyle = '#b91c1c';
+  ctx.fillRect(58, 60, 74, 198);
+  ctx.strokeStyle = '#fde68a';
+  ctx.lineWidth = 3;
+  ctx.strokeRect(63, 65, 64, 188);
   ctx.fillStyle = '#fffdf7';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.font = '900 108px "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif';
-  ctx.shadowColor = 'rgba(0,0,0,0.55)';
-  ctx.shadowBlur = 14;
-  ctx.fillText(title, 512, 134);
+  ctx.font = '900 30px "Kaiti TC", "STKaiti", "Noto Serif TC", serif';
+  ['華', '岡', '名', '店'].forEach((ch, idx) => {
+    ctx.fillText(ch, 95, 92 + idx * 44);
+  });
 
-  // Subtitle
-  ctx.shadowBlur = 0;
+  // Right decorative pillar
   ctx.fillStyle = accentColor;
-  ctx.font = '700 38px "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif';
-  ctx.fillText(subtitle, 512, 232);
+  ctx.fillRect(928, 60, 22, 198);
+
+  // Main Title with 3D outline stroke + drop shadow
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = '900 112px "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif';
+  ctx.shadowColor = 'rgba(0,0,0,0.72)';
+  ctx.shadowBlur = 18;
+  ctx.shadowOffsetY = 5;
+  ctx.lineWidth = 10;
+  ctx.strokeStyle = 'rgba(15, 23, 42, 0.75)';
+  ctx.strokeText(title, 526, 130);
+  ctx.fillStyle = '#fffdf7';
+  ctx.fillText(title, 526, 130);
+
+  // Subtitle pill bar
+  ctx.shadowBlur = 0;
+  ctx.shadowOffsetY = 0;
+  ctx.fillStyle = 'rgba(0,0,0,0.42)';
+  ctx.fillRect(210, 204, 632, 54);
+  ctx.strokeStyle = accentColor;
+  ctx.lineWidth = 2;
+  ctx.strokeRect(210, 204, 632, 54);
+
+  ctx.fillStyle = accentColor;
+  ctx.font = '800 36px "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif';
+  ctx.fillText(`★ ${subtitle} ★`, 526, 232);
 
   return finalizeTexture(canvas);
 }
 
 export function createVerticalSignTexture(text: string, bgColor: string, accentColor: string): THREE.CanvasTexture {
   const { canvas, ctx } = makeCanvas(256, 768);
-  ctx.fillStyle = bgColor;
+  const grad = ctx.createLinearGradient(0, 0, 256, 0);
+  grad.addColorStop(0, '#1e293b');
+  grad.addColorStop(0.08, bgColor);
+  grad.addColorStop(0.5, bgColor);
+  grad.addColorStop(0.92, bgColor);
+  grad.addColorStop(1, '#1e293b');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, 256, 768);
+
+  // Center acrylic tube glow
+  const glow = ctx.createRadialGradient(128, 384, 20, 128, 384, 340);
+  glow.addColorStop(0, 'rgba(255,255,255,0.22)');
+  glow.addColorStop(1, 'rgba(0,0,0,0.18)');
+  ctx.fillStyle = glow;
   ctx.fillRect(0, 0, 256, 768);
 
   ctx.strokeStyle = accentColor;
   ctx.lineWidth = 10;
-  ctx.strokeRect(12, 12, 232, 744);
+  ctx.strokeRect(14, 14, 228, 740);
+  ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+  ctx.lineWidth = 3;
+  ctx.strokeRect(24, 24, 208, 720);
 
   const chars = Array.from(text);
-  const startY = chars.length <= 4 ? 145 : 105;
-  const stepY = chars.length <= 4 ? 145 : 112;
+  const startY = chars.length <= 3 ? 190 : chars.length <= 4 ? 145 : 105;
+  const stepY = chars.length <= 3 ? 185 : chars.length <= 4 ? 145 : 112;
 
-  ctx.fillStyle = '#fffdf8';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.font = `900 ${chars.length <= 4 ? 102 : 84}px "Noto Sans TC", "PingFang TC", sans-serif`;
-  ctx.shadowColor = 'rgba(0,0,0,0.45)';
-  ctx.shadowBlur = 8;
+  ctx.font = `900 ${chars.length <= 4 ? 104 : 84}px "Noto Sans TC", "PingFang TC", sans-serif`;
+  ctx.shadowColor = 'rgba(0,0,0,0.65)';
+  ctx.shadowBlur = 12;
+  ctx.lineWidth = 8;
+  ctx.strokeStyle = 'rgba(0,0,0,0.65)';
 
   chars.forEach((ch, idx) => {
-    ctx.fillText(ch, 128, startY + idx * stepY);
+    const cy = startY + idx * stepY;
+    ctx.strokeText(ch, 128, cy);
+    ctx.fillStyle = '#fffdf8';
+    ctx.fillText(ch, 128, cy);
   });
 
   return finalizeTexture(canvas);
@@ -167,66 +227,284 @@ export function createSevenElevenSignTexture(): THREE.CanvasTexture {
 }
 
 export function createAsphaltTexture(): THREE.CanvasTexture {
-  const { canvas, ctx } = makeCanvas(512, 1024);
-  ctx.fillStyle = '#2d3138';
-  ctx.fillRect(0, 0, 512, 1024);
+  const { canvas, ctx } = makeCanvas(1024, 2048);
+  ctx.fillStyle = '#252930';
+  ctx.fillRect(0, 0, 1024, 2048);
 
-  // Asphalt speckle grain
-  for (let i = 0; i < 16000; i++) {
-    const x = Math.random() * 512;
-    const y = Math.random() * 1024;
-    const v = 35 + Math.floor(Math.random() * 34);
+  // Subtle asphalt patch variation & damp mountain road sheen
+  for (let p = 0; p < 24; p++) {
+    const px = 120 + Math.random() * 780;
+    const py = Math.random() * 2048;
+    const pr = 80 + Math.random() * 160;
+    const grad = ctx.createRadialGradient(px, py, 10, px, py, pr);
+    grad.addColorStop(0, p % 2 === 0 ? 'rgba(15,18,24,0.35)' : 'rgba(55,62,72,0.22)');
+    grad.addColorStop(1, 'rgba(37,41,48,0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(px - pr, py - pr, pr * 2, pr * 2);
+  }
+
+  // Fine mineral aggregate speckle grain
+  for (let i = 0; i < 42000; i++) {
+    const x = Math.random() * 1024;
+    const y = Math.random() * 2048;
+    const v = 28 + Math.floor(Math.random() * 42);
     ctx.fillStyle = `rgb(${v},${v + 2},${v + 5})`;
     ctx.fillRect(x, y, 2, 2);
   }
 
-  // Red/white Taiwanese curb stripes on both sides
-  const stripeLen = 64;
-  for (let y = 0; y < 1024; y += stripeLen) {
-    const isRed = Math.floor(y / stripeLen) % 2 === 0;
-    ctx.fillStyle = isRed ? '#b91c1c' : '#cbd5e1';
-    ctx.fillRect(8, y, 16, stripeLen);
-    ctx.fillRect(488, y, 16, stripeLen);
+  // Concrete roadside gutter apron on both edges
+  ctx.fillStyle = '#474c54';
+  ctx.fillRect(0, 0, 56, 2048);
+  ctx.fillRect(968, 0, 56, 2048);
+
+  // Authentic Taipei continuous red no-parking curb line (紅線) with weathered paint cracks
+  ctx.fillStyle = '#c83228';
+  ctx.fillRect(58, 0, 22, 2048);
+  ctx.fillRect(944, 0, 22, 2048);
+  for (let i = 0; i < 900; i++) {
+    ctx.fillStyle = 'rgba(37,41,48,0.45)';
+    ctx.fillRect(56 + Math.random() * 26, Math.random() * 2048, 4, 3);
+    ctx.fillRect(942 + Math.random() * 26, Math.random() * 2048, 4, 3);
   }
 
-  // Subtle center worn track & drain grates
-  ctx.fillStyle = 'rgba(20, 22, 27, 0.35)';
-  ctx.fillRect(150, 0, 70, 1024);
-  ctx.fillRect(292, 0, 70, 1024);
+  // Cast-iron storm drain grates (水溝蓋) along both gutters
+  for (let y = 120; y < 2048; y += 340) {
+    for (const gx of [10, 974]) {
+      ctx.fillStyle = '#181b20';
+      ctx.fillRect(gx, y, 40, 86);
+      ctx.strokeStyle = '#64748b';
+      ctx.lineWidth = 3;
+      ctx.strokeRect(gx, y, 40, 86);
+      ctx.fillStyle = '#475569';
+      for (let sy = y + 8; sy < y + 80; sy += 10) {
+        ctx.fillRect(gx + 4, sy, 32, 4);
+      }
+    }
+  }
 
-  // Manhole cover
-  ctx.beginPath();
-  ctx.arc(256, 360, 26, 0, Math.PI * 2);
-  ctx.fillStyle = '#475569';
-  ctx.fill();
-  ctx.strokeStyle = '#1e293b';
+  // Subtle tire tracks & asphalt crack lines
+  ctx.fillStyle = 'rgba(14, 16, 21, 0.36)';
+  ctx.fillRect(280, 0, 130, 2048);
+  ctx.fillRect(614, 0, 130, 2048);
+
+  // Detailed Taipei round cast-iron manhole covers
+  for (const [mx, my] of [
+    [512, 640],
+    [460, 1580],
+  ]) {
+    ctx.beginPath();
+    ctx.arc(mx, my, 52, 0, Math.PI * 2);
+    ctx.fillStyle = '#334155';
+    ctx.fill();
+    ctx.strokeStyle = '#1e293b';
+    ctx.lineWidth = 6;
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.arc(mx, my, 36, 0, Math.PI * 2);
+    ctx.strokeStyle = '#64748b';
+    ctx.lineWidth = 3;
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.arc(mx, my, 16, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  return finalizeTexture(canvas, 1, 5);
+}
+
+/**
+ * PBR Roughness Map for Yangmingshan Damp Asphalt + Puddle Reflections
+ * Dark areas (low roughness) create mirror-like reflections of neon signs & lanterns!
+ */
+export function createAsphaltRoughnessMap(): THREE.CanvasTexture {
+  const { canvas, ctx } = makeCanvas(512, 1024);
+  // Base damp asphalt roughness (~0.68)
+  ctx.fillStyle = '#aeaeae';
+  ctx.fillRect(0, 0, 512, 1024);
+
+  // Subtle organic dampness variations (no hard circular edges)
+  for (let i = 0; i < 45; i++) {
+    const px = Math.random() * 512;
+    const py = Math.random() * 1024;
+    const r = 60 + Math.random() * 130;
+    const grad = ctx.createRadialGradient(px, py, 5, px, py, r);
+    grad.addColorStop(0, i % 2 === 0 ? 'rgba(90,90,90,0.28)' : 'rgba(210,210,210,0.22)');
+    grad.addColorStop(1, 'rgba(174,174,174,0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(px - r, py - r, r * 2, r * 2);
+  }
+
+  // Subtle wheel-track polish
+  ctx.fillStyle = 'rgba(110, 110, 110, 0.25)';
+  ctx.fillRect(140, 0, 64, 1024);
+  ctx.fillRect(308, 0, 64, 1024);
+
+  return finalizeTexture(canvas, 1, 5, true);
+}
+
+/**
+ * PBR Bump Map for Asphalt Micro-Aggregate Relief
+ */
+export function createAsphaltBumpMap(): THREE.CanvasTexture {
+  const { canvas, ctx } = makeCanvas(512, 1024);
+  ctx.fillStyle = '#808080';
+  ctx.fillRect(0, 0, 512, 1024);
+
+  for (let i = 0; i < 28000; i++) {
+    const x = Math.random() * 512;
+    const y = Math.random() * 1024;
+    const v = 90 + Math.floor(Math.random() * 90);
+    ctx.fillStyle = `rgb(${v},${v},${v})`;
+    ctx.fillRect(x, y, 2, 2);
+  }
+  return finalizeTexture(canvas, 1, 5, true);
+}
+
+/**
+ * Authentic Taiwanese Arcade Non-Slip Red/Slate Tile Sidewalk Texture (騎樓防滑紅磚與洗石子地磚)
+ */
+export function createArcadeTileTexture(): THREE.CanvasTexture {
+  const { canvas, ctx } = makeCanvas(512, 512);
+  ctx.fillStyle = '#7c584c';
+  ctx.fillRect(0, 0, 512, 512);
+
+  // Individual square clay/slate tile color variation
+  const tileSize = 64;
+  for (let ty = 0; ty < 512; ty += tileSize) {
+    for (let tx = 0; tx < 512; tx += tileSize) {
+      const shade = (Math.random() - 0.5) * 14;
+      ctx.fillStyle = `rgb(${118 + shade}, ${88 + shade * 0.8}, ${78 + shade * 0.7})`;
+      ctx.fillRect(tx + 2, ty + 2, tileSize - 4, tileSize - 4);
+
+      // Subtle anti-slip concentric groove inside each arcade tile
+      ctx.strokeStyle = 'rgba(40, 25, 20, 0.22)';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(tx + 10, ty + 10, tileSize - 20, tileSize - 20);
+    }
+  }
+
+  // Grout lines
+  ctx.strokeStyle = '#3f3a36';
   ctx.lineWidth = 4;
-  ctx.stroke();
+  for (let i = 0; i <= 512; i += tileSize) {
+    ctx.beginPath();
+    ctx.moveTo(i, 0);
+    ctx.lineTo(i, 512);
+    ctx.moveTo(0, i);
+    ctx.lineTo(512, i);
+    ctx.stroke();
+  }
 
-  return finalizeTexture(canvas, 1, 6);
+  // Washed terrazzo curb edge strip (洗石子騎樓邊條)
+  ctx.fillStyle = '#6b7280';
+  ctx.fillRect(0, 0, 36, 512);
+  ctx.fillRect(476, 0, 36, 512);
+  for (let i = 0; i < 1800; i++) {
+    const v = 70 + Math.floor(Math.random() * 90);
+    ctx.fillStyle = `rgb(${v},${v},${v})`;
+    ctx.fillRect(Math.random() * 36, Math.random() * 512, 2, 2);
+    ctx.fillRect(476 + Math.random() * 36, Math.random() * 512, 2, 2);
+  }
+
+  return finalizeTexture(canvas, 1, 14);
 }
 
 export function createTileFacadeTexture(baseHex: string, lineHex: string): THREE.CanvasTexture {
-  const { canvas, ctx } = makeCanvas(256, 256);
+  const { canvas, ctx } = makeCanvas(512, 512);
   ctx.fillStyle = baseHex;
-  ctx.fillRect(0, 0, 256, 256);
+  ctx.fillRect(0, 0, 512, 512);
 
+  // Individual ceramic brick variation
+  for (let y = 0; y < 512; y += 32) {
+    const offset = (y / 32) % 2 === 0 ? 0 : 32;
+    for (let x = -32; x < 512; x += 64) {
+      const tint = (Math.random() - 0.5) * 16;
+      ctx.fillStyle = tint > 0 ? `rgba(255,255,255,${tint / 255})` : `rgba(0,0,0,${-tint / 255})`;
+      ctx.fillRect(x + offset + 2, y + 2, 60, 28);
+    }
+  }
+
+  // Mortar lines
   ctx.strokeStyle = lineHex;
-  ctx.lineWidth = 2;
-  for (let y = 0; y < 256; y += 32) {
+  ctx.lineWidth = 3;
+  for (let y = 0; y <= 512; y += 32) {
     ctx.beginPath();
     ctx.moveTo(0, y);
-    ctx.lineTo(256, y);
+    ctx.lineTo(512, y);
     ctx.stroke();
     const offset = (y / 32) % 2 === 0 ? 0 : 32;
-    for (let x = offset; x < 256; x += 64) {
+    for (let x = offset; x <= 512; x += 64) {
       ctx.beginPath();
       ctx.moveTo(x, y);
       ctx.lineTo(x, y + 32);
       ctx.stroke();
     }
   }
+
+  // Subtle mountain-climate rain streak weathering
+  const weatherGrad = ctx.createLinearGradient(0, 0, 0, 512);
+  weatherGrad.addColorStop(0, 'rgba(15, 23, 42, 0.16)');
+  weatherGrad.addColorStop(0.25, 'rgba(0, 0, 0, 0)');
+  weatherGrad.addColorStop(0.8, 'rgba(0, 0, 0, 0)');
+  weatherGrad.addColorStop(1, 'rgba(15, 23, 42, 0.22)');
+  ctx.fillStyle = weatherGrad;
+  ctx.fillRect(0, 0, 512, 512);
+
   return finalizeTexture(canvas, 3, 2);
+}
+
+export function createTileBumpTexture(): THREE.CanvasTexture {
+  const { canvas, ctx } = makeCanvas(256, 256);
+  ctx.fillStyle = '#d8d8d8';
+  ctx.fillRect(0, 0, 256, 256);
+
+  ctx.strokeStyle = '#303030';
+  ctx.lineWidth = 3;
+  for (let y = 0; y <= 256; y += 32) {
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(256, y);
+    ctx.stroke();
+    const offset = (y / 32) % 2 === 0 ? 0 : 32;
+    for (let x = offset; x <= 256; x += 64) {
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.lineTo(x, y + 32);
+      ctx.stroke();
+    }
+  }
+  return finalizeTexture(canvas, 3, 2, true);
+}
+
+/**
+ * Corrugated Sheet Metal Texture for Taiwanese Rooftop Additions & Canopies (鐵皮浪板與鐵捲門)
+ */
+export function createCorrugatedMetalTexture(baseHex: string, rustTint = true): THREE.CanvasTexture {
+  const { canvas, ctx } = makeCanvas(256, 256);
+  ctx.fillStyle = baseHex;
+  ctx.fillRect(0, 0, 256, 256);
+
+  for (let x = 0; x < 256; x += 16) {
+    const grad = ctx.createLinearGradient(x, 0, x + 16, 0);
+    grad.addColorStop(0, 'rgba(0,0,0,0.28)');
+    grad.addColorStop(0.5, 'rgba(255,255,255,0.18)');
+    grad.addColorStop(1, 'rgba(0,0,0,0.28)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(x, 0, 16, 256);
+  }
+
+  if (rustTint) {
+    const rustGrad = ctx.createLinearGradient(0, 0, 0, 256);
+    rustGrad.addColorStop(0, 'rgba(120, 53, 15, 0.25)');
+    rustGrad.addColorStop(0.5, 'rgba(0,0,0,0)');
+    rustGrad.addColorStop(1, 'rgba(120, 53, 15, 0.32)');
+    ctx.fillStyle = rustGrad;
+    ctx.fillRect(0, 0, 256, 256);
+  }
+
+  return finalizeTexture(canvas, 4, 1);
 }
 
 export function createShopInteriorTexture(
