@@ -2,12 +2,20 @@ import * as THREE from 'three';
 import { SHOPS, ShopConfig } from '../data/shops';
 import {
   createAsphaltTexture,
+  createCeilingGridTexture,
+  createDahongpaoBaseballCalendarTexture,
+  createDahongpaoCounterFrontTexture,
+  createDahongpaoInteriorWallMenuTexture,
+  createDahongpaoLanternTexture,
+  createDahongpaoSevenFlavorsBannerTexture,
   createMenuBoardTexture,
   createSevenElevenSignTexture,
   createShopInteriorTexture,
   createSignTexture,
   createStreetSignTexture,
+  createTerrazzoFloorTexture,
   createTileFacadeTexture,
+  createTissuePackTexture,
   createVerticalSignTexture,
 } from './textures';
 
@@ -59,10 +67,15 @@ export interface BuiltAlley {
   colliders: AABB[];
   interactables: Interactable[];
   animated: AnimatedWorldRefs;
-  getGroundHeight: (z: number) => number;
+  getGroundHeight: (z: number, x?: number) => number;
 }
 
-export function getGroundHeight(z: number): number {
+export function getGroundHeight(z: number, x = 0): number {
+  // Inside or stepping into 大紅袍 (3 光華路26巷, z = -4.2 to +4.2, left side x < -4.6)
+  if (z >= -4.25 && z <= 4.25 && x < -4.6) {
+    if (x < -5.55) return 0.22; // Elevated interior terrazzo floor
+    return 0.12; // 2-step tiled entrance threshold
+  }
   if (z <= 24) return 0;
   // Gentle "仇人坡" ramp rising toward the campus entrance
   const t = Math.min(12, z - 24);
@@ -226,6 +239,23 @@ export function buildGuanghuaAlley(parentScene: THREE.Scene): BuiltAlley {
   ];
 
   SHOPS.forEach((shop, idx) => {
+    if (shop.id === 'dahongpao') {
+      buildDahongpaoStoreAndInterior({
+        scene,
+        shop,
+        colliders,
+        interactables,
+        lanterns,
+        shopLights,
+        emissiveSignMaterials,
+        windowMaterials,
+        steamEmitters,
+        metalMat,
+        steelMat,
+      });
+      return;
+    }
+
     const isLeft = shop.side === 'left';
     const wallX = isLeft ? -8.4 : 8.4;
     const frontX = isLeft ? -6.3 : 6.3;
@@ -488,8 +518,9 @@ export function buildGuanghuaAlley(parentScene: THREE.Scene): BuiltAlley {
     scene.add(shopGroup);
   });
 
-  // Main continuous building walls behind sidewalks
-  colliders.push({ minX: -14, maxX: -6.35, minZ: -31, maxZ: 24.5 });
+  // Main continuous building walls behind sidewalks (carved open at z = -4.25..4.25 for 大紅袍 walk-in interior!)
+  colliders.push({ minX: -14, maxX: -6.35, minZ: -31, maxZ: -4.25 });
+  colliders.push({ minX: -14, maxX: -6.35, minZ: 4.25, maxZ: 24.5 });
   colliders.push({ minX: 6.35, maxX: 14, minZ: -34, maxZ: 24.5 });
   // Entrance ramp side walls
   colliders.push({ minX: -10, maxX: -4.8, minZ: 23.5, maxZ: 36 });
@@ -851,5 +882,772 @@ function createScooterMesh(bodyColor: number): THREE.Group {
   headlight.position.set(0, 0.85, 0.57);
 
   g.add(fWheel, bWheel, chassis, frontShield, handlebar, seat, headlight);
+  return g;
+}
+
+interface DahongpaoBuilderParams {
+  scene: THREE.Group;
+  shop: ShopConfig;
+  colliders: AABB[];
+  interactables: Interactable[];
+  lanterns: THREE.Group[];
+  shopLights: THREE.PointLight[];
+  emissiveSignMaterials: THREE.MeshStandardMaterial[];
+  windowMaterials: THREE.MeshStandardMaterial[];
+  steamEmitters: SteamEmitter[];
+  metalMat: THREE.MeshStandardMaterial;
+  steelMat: THREE.MeshStandardMaterial;
+}
+
+/**
+ * 1:1 Authentic Exterior Stall + Walk-in Interior Dining Room for 大紅袍 (3 光華路26巷)
+ * Reconstructed directly from the user's real exterior & interior reference photographs.
+ */
+function buildDahongpaoStoreAndInterior(params: DahongpaoBuilderParams): void {
+  const {
+    scene,
+    shop,
+    colliders,
+    interactables,
+    lanterns,
+    shopLights,
+    emissiveSignMaterials,
+    windowMaterials,
+    steamEmitters,
+    metalMat,
+    steelMat,
+  } = params;
+
+  const group = new THREE.Group();
+  group.position.set(0, 0, shop.z); // z = 0
+
+  const whiteWallMat = new THREE.MeshStandardMaterial({ color: 0xf1f0ea, roughness: 0.85 });
+  const weatheredConcreteMat = new THREE.MeshStandardMaterial({ color: 0x8d8c84, roughness: 0.92 });
+  const darkMetalMat = new THREE.MeshStandardMaterial({ color: 0x1e2024, roughness: 0.45, metalness: 0.55 });
+  const plywoodMat = new THREE.MeshStandardMaterial({ color: 0xc29b6c, roughness: 0.82 });
+  const cardboardMat = new THREE.MeshStandardMaterial({ color: 0xb68f5e, roughness: 0.85 });
+
+  // ============================================================================
+  // 1. UPPER APARTMENT BUILDING (2nd & 3rd Floors above the walkable ground floor)
+  // ============================================================================
+  const upperFacadeTex = createTileFacadeTexture('#d8d5ce', '#9c988e');
+  const upperBldg = new THREE.Mesh(
+    new THREE.BoxGeometry(6.8, 7.6, 9.2),
+    new THREE.MeshStandardMaterial({ map: upperFacadeTex, roughness: 0.88 })
+  );
+  upperBldg.position.set(-9.4, 7.05, 0);
+  upperBldg.castShadow = true;
+  upperBldg.receiveShadow = true;
+  group.add(upperBldg);
+
+  // Weathered concrete 2nd-floor slab overhang (老屋水泥雨庇) as seen at top of exterior photo
+  const concreteLedge = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.34, 8.8), weatheredConcreteMat);
+  concreteLedge.position.set(-5.65, 3.35, 0);
+  group.add(concreteLedge);
+
+  // Upper metal security grille windows (鐵窗)
+  for (let wz of [-2.2, 2.0]) {
+    const grille = new THREE.Mesh(new THREE.BoxGeometry(0.35, 1.35, 1.85), metalMat);
+    grille.position.set(-5.85, 4.75, wz);
+    group.add(grille);
+  }
+
+  // Projecting red sign on far right corner ("大紅袍" vertical/side sign)
+  const vSignTex = createVerticalSignTexture('大紅袍', '#b91c1c', '#fef08a');
+  const vSignMat = new THREE.MeshStandardMaterial({
+    map: vSignTex,
+    emissive: new THREE.Color(0xffffff),
+    emissiveMap: vSignTex,
+    emissiveIntensity: 0.55,
+    roughness: 0.35,
+  });
+  emissiveSignMaterials.push(vSignMat);
+  const vSign = new THREE.Mesh(new THREE.BoxGeometry(0.95, 2.5, 0.22), vSignMat);
+  vSign.position.set(-4.5, 4.35, -3.9);
+  group.add(vSign);
+
+  // ============================================================================
+  // 2. WALK-IN INTERIOR ROOM SHELL (x = -6.0 to -12.6, z = -4.2 to +4.2, y = 0.22 to 3.08)
+  // ============================================================================
+  // Elevated Terrazzo Interior Floor (y = 0.22)
+  const floorTex = createTerrazzoFloorTexture();
+  const interiorFloor = new THREE.Mesh(
+    new THREE.BoxGeometry(6.9, 0.22, 8.4),
+    new THREE.MeshStandardMaterial({ map: floorTex, roughness: 0.72 })
+  );
+  interiorFloor.position.set(-9.25, 0.11, 0);
+  interiorFloor.receiveShadow = true;
+  group.add(interiorFloor);
+
+  // White T-bar grid drop ceiling (輕鋼架天花板, y = 3.06)
+  const ceilingTex = createCeilingGridTexture();
+  const ceilingMesh = new THREE.Mesh(
+    new THREE.PlaneGeometry(6.8, 8.4),
+    new THREE.MeshStandardMaterial({ map: ceilingTex, roughness: 0.85, side: THREE.DoubleSide })
+  );
+  ceilingMesh.rotation.x = Math.PI / 2;
+  ceilingMesh.position.set(-9.25, 3.06, 0);
+  group.add(ceilingMesh);
+
+  // 6 Recessed Dual-Tube Fluorescent Ceiling Light Troffers (雙管輕鋼架日光燈盤)
+  const trofferFrameMat = new THREE.MeshStandardMaterial({ color: 0xd1d5db, roughness: 0.4, metalness: 0.5 });
+  const tubeGlowMat = new THREE.MeshStandardMaterial({
+    color: 0xffffff,
+    emissive: new THREE.Color(0xf0f9ff),
+    emissiveIntensity: 1.35,
+    roughness: 0.2,
+  });
+  windowMaterials.push(tubeGlowMat);
+
+  for (const lx of [-7.3, -9.4, -11.4]) {
+    for (const lz of [-1.6, 1.3]) {
+      const troffer = new THREE.Mesh(new THREE.BoxGeometry(1.15, 0.04, 0.58), trofferFrameMat);
+      troffer.position.set(lx, 3.04, lz);
+      const tube1 = new THREE.Mesh(new THREE.BoxGeometry(1.05, 0.02, 0.14), tubeGlowMat);
+      tube1.position.set(lx, 3.02, lz - 0.14);
+      const tube2 = new THREE.Mesh(new THREE.BoxGeometry(1.05, 0.02, 0.14), tubeGlowMat);
+      tube2.position.set(lx, 3.02, lz + 0.14);
+      group.add(troffer, tube1, tube2);
+    }
+  }
+
+  // Bright Daylight-White Interior PointLights (so inside of 大紅袍 is always brightly lit like the photo)
+  const intLight1 = new THREE.PointLight(0xf8fafc, 16, 12, 1.15);
+  intLight1.position.set(-7.8, 2.85, -0.2);
+  const intLight2 = new THREE.PointLight(0xf8fafc, 16, 12, 1.15);
+  intLight2.position.set(-10.8, 2.85, -0.2);
+  group.add(intLight1, intLight2);
+  shopLights.push(intLight1, intLight2);
+
+  // Back Wall (West, x = -12.6)
+  const backWall = new THREE.Mesh(new THREE.BoxGeometry(0.22, 3.0, 8.4), whiteWallMat);
+  backWall.position.set(-12.6, 1.65, 0);
+  group.add(backWall);
+
+  // South Wall (Left wall when looking out from inside, z = -4.15)
+  const southWall = new THREE.Mesh(new THREE.BoxGeometry(6.8, 3.0, 0.2), whiteWallMat);
+  southWall.position.set(-9.25, 1.65, -4.15);
+  group.add(southWall);
+
+  // North Wall (Right wall when looking out from inside, z = +4.15)
+  const northWall = new THREE.Mesh(new THREE.BoxGeometry(6.8, 3.0, 0.2), whiteWallMat);
+  northWall.position.set(-9.25, 1.65, 4.15);
+  group.add(northWall);
+
+  // Wall Colliders for Walk-in Interior Room
+  colliders.push({ minX: -13.0, maxX: -12.35, minZ: -4.35, maxZ: 4.35 }); // Back wall
+  colliders.push({ minX: -12.8, maxX: -4.8, minZ: -4.35, maxZ: -3.95 }); // South wall
+  colliders.push({ minX: -12.8, maxX: -4.8, minZ: 3.95, maxZ: 4.35 }); // North wall
+
+  // ============================================================================
+  // 3. SOUTH WALL DETAILS (Split AC Unit + Large Red 2x5 Circular Photo Menu Board)
+  // ============================================================================
+  // White Split AC Indoor Unit near ceiling (分離式冷氣室內機)
+  const acUnit = new THREE.Mesh(
+    new THREE.BoxGeometry(1.25, 0.36, 0.28),
+    new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.3 })
+  );
+  acUnit.position.set(-8.85, 2.72, -3.92);
+  const acVent = new THREE.Mesh(new THREE.BoxGeometry(1.15, 0.05, 0.29), darkMetalMat);
+  acVent.position.set(-8.85, 2.58, -3.91);
+  group.add(acUnit, acVent);
+
+  // Large Red Sichuan Menu Board ("大紅袍 乾麵 · 味在四川" with 2x5 circular food photos)
+  const wallMenuTex = createDahongpaoInteriorWallMenuTexture();
+  const wallMenuMesh = new THREE.Mesh(
+    new THREE.BoxGeometry(3.1, 1.62, 0.05),
+    new THREE.MeshStandardMaterial({ map: wallMenuTex, roughness: 0.45 })
+  );
+  wallMenuMesh.position.set(-8.45, 1.68, -4.01);
+  group.add(wallMenuMesh);
+
+  // ============================================================================
+  // 4. FRONT PARTITION WALL ("HERO! HITO! 冠軍之路 2026" Calendar + Newspapers + Boxes)
+  //    AND TRANSPARENT PVC STRIP CURTAIN DOORWAY (透明塑膠門簾)
+  // ============================================================================
+  // Partition behind the exterior cooking stall (x = -6.12, z = -4.05 to -0.85):
+  // Exterior face (+x, behind chef) is white wall; Interior face (-x, dining room) is wooden plywood!
+  const partitionMaterials = [
+    whiteWallMat, // +x (exterior behind chef)
+    plywoodMat,   // -x (interior plywood with HERO! HITO! 2026 calendar)
+    plywoodMat,
+    plywoodMat,
+    plywoodMat,
+    plywoodMat,
+  ];
+  const plywoodPartition = new THREE.Mesh(new THREE.BoxGeometry(0.14, 2.86, 3.2), partitionMaterials);
+  plywoodPartition.position.set(-6.12, 1.64, -2.45);
+  group.add(plywoodPartition);
+
+  // Tiled pillar on far right behind the cooking counter & fan (as seen in exterior photo)
+  const rightTilePillar = new THREE.Mesh(
+    new THREE.BoxGeometry(0.45, 2.95, 0.55),
+    new THREE.MeshStandardMaterial({ map: upperFacadeTex, roughness: 0.75 })
+  );
+  rightTilePillar.position.set(-5.85, 1.62, -3.82);
+  group.add(rightTilePillar);
+
+  // "HERO! HITO! 冠軍之路 2026" Blue Baseball Calendar Poster on inside face of plywood (-x face)
+  const calendarTex = createDahongpaoBaseballCalendarTexture();
+  const calendarPoster = new THREE.Mesh(
+    new THREE.PlaneGeometry(1.08, 1.56),
+    new THREE.MeshStandardMaterial({ map: calendarTex, roughness: 0.5 })
+  );
+  calendarPoster.rotation.y = -Math.PI / 2;
+  calendarPoster.position.set(-6.20, 1.98, -2.92);
+  group.add(calendarPoster);
+
+  // Stacked folded newspapers (舊報紙堆) + green "Fitness" box + cardboard boxes below calendar
+  const baseBox = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.34, 0.56), cardboardMat);
+  baseBox.position.set(-6.44, 0.92, -3.48);
+  group.add(baseBox);
+
+  for (let n = 0; n < 7; n++) {
+    const paperLayer = new THREE.Mesh(
+      new THREE.BoxGeometry(0.38, 0.035, 0.52),
+      new THREE.MeshStandardMaterial({ color: n % 2 === 0 ? 0xe5e7eb : 0xd1d5db, roughness: 0.9 })
+    );
+    paperLayer.position.set(-6.44, 1.12 + n * 0.04, -3.48);
+    paperLayer.rotation.y = (n % 3 - 1) * 0.04;
+    group.add(paperLayer);
+  }
+
+  const greenBox = new THREE.Mesh(
+    new THREE.BoxGeometry(0.28, 0.16, 0.36),
+    new THREE.MeshStandardMaterial({ color: 0x3f6212, roughness: 0.65 })
+  );
+  greenBox.position.set(-6.44, 1.46, -3.48);
+  group.add(greenBox);
+
+  // Wide "KY-850" Brown Cardboard Boxes stacked against partition behind front table
+  const kyBox1 = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.55, 1.45), cardboardMat);
+  kyBox1.position.set(-6.42, 1.02, -1.95);
+  const kyBox2 = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.52, 0.65), cardboardMat);
+  kyBox2.position.set(-6.44, 1.0, -2.95);
+  group.add(kyBox1, kyBox2);
+
+  // Clear Vertical-Strip PVC Plastic Curtain (透明防冷氣外洩塑膠門簾, z = -0.82 to +1.75)
+  const curtainRod = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 2.75, 10), steelMat);
+  curtainRod.rotation.x = Math.PI / 2;
+  curtainRod.position.set(-6.08, 2.94, 0.45);
+  group.add(curtainRod);
+
+  const pvcStripMat = new THREE.MeshPhysicalMaterial({
+    color: 0xe0f2fe,
+    transparent: true,
+    opacity: 0.28,
+    roughness: 0.12,
+    metalness: 0.05,
+    transmission: 0.45,
+    side: THREE.DoubleSide,
+    depthWrite: false,
+  });
+
+  const numStrips = 9;
+  for (let s = 0; s < numStrips; s++) {
+    const sz = -0.72 + s * 0.29;
+    // White top header clamp band
+    const clamp = new THREE.Mesh(
+      new THREE.BoxGeometry(0.025, 0.09, 0.27),
+      new THREE.MeshStandardMaterial({ color: 0xf1f5f9, roughness: 0.5 })
+    );
+    clamp.position.set(-6.08, 2.86, sz);
+    group.add(clamp);
+
+    // Translucent glossy vertical PVC strip
+    const strip = new THREE.Mesh(new THREE.PlaneGeometry(0.31, 2.52), pvcStripMat);
+    strip.rotation.y = Math.PI / 2 + (s % 2 === 0 ? 0.03 : -0.03);
+    strip.position.set(-6.08 + (s % 2) * 0.012, 1.58, sz);
+    group.add(strip);
+  }
+
+  // ============================================================================
+  // 5. NORTH WALL DETAILS (Wall-Mounted Fans + Wooden Utility Shelves + Condiments)
+  // ============================================================================
+  // 2 Wall-Mounted Oscillating Fans (壁掛式工業扇)
+  for (const fx of [-7.65, -10.35]) {
+    const fanGroup = new THREE.Group();
+    fanGroup.position.set(fx, 2.42, 3.92);
+    const bracket = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.22, 0.25), steelMat);
+    const cage = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.26, 0.26, 0.12, 16),
+      new THREE.MeshStandardMaterial({ color: 0x9ca3af, roughness: 0.4, metalness: 0.5, wireframe: false })
+    );
+    cage.rotation.x = Math.PI / 2 - 0.25;
+    cage.position.set(0, -0.04, -0.18);
+    fanGroup.add(bracket, cage);
+    group.add(fanGroup);
+  }
+
+  // Wooden Utility Shelves along North Wall (右側木製置物架、調味料、紙箱與塑膠袋)
+  const shelfLower = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.06, 0.52), plywoodMat);
+  shelfLower.position.set(-8.8, 1.08, 3.82);
+  const shelfUpper = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.05, 0.38), plywoodMat);
+  shelfUpper.position.set(-9.4, 1.98, 3.88);
+  const underBox1 = new THREE.Mesh(new THREE.BoxGeometry(0.75, 0.65, 0.46), cardboardMat);
+  underBox1.position.set(-9.6, 0.58, 3.82);
+  const underBox2 = new THREE.Mesh(new THREE.BoxGeometry(0.65, 0.58, 0.44), cardboardMat);
+  underBox2.position.set(-8.5, 0.54, 3.82);
+  group.add(shelfLower, shelfUpper, underBox1, underBox2);
+
+  // ============================================================================
+  // 6. 3 ROWS OF AUTHENTIC CREAM DINING TABLES + TISSUE PACKS + ROUND STOOLS + DINERS
+  // ============================================================================
+  const creamTableMat = new THREE.MeshStandardMaterial({ color: 0xebe0c5, roughness: 0.45 });
+  const stoolSeatMat = new THREE.MeshStandardMaterial({ color: 0x374151, roughness: 0.5, metalness: 0.3 });
+  const tissuePackTex = createTissuePackTexture();
+  const tissuePackMat = new THREE.MeshStandardMaterial({ map: tissuePackTex, roughness: 0.4 });
+  const whiteTissueMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.7, side: THREE.DoubleSide });
+
+  const tableRowsX = [-7.35, -9.25, -11.15];
+  tableRowsX.forEach((tx, rIdx) => {
+    // Long rectangular cream-topped table with black metal trim (spanning z = -2.85 to +1.05)
+    const tableCenterZ = -0.9;
+    const tableLenZ = 3.8;
+
+    const blackRim = new THREE.Mesh(new THREE.BoxGeometry(0.78, 0.055, tableLenZ + 0.04), darkMetalMat);
+    blackRim.position.set(tx, 0.94, tableCenterZ);
+    const creamTop = new THREE.Mesh(new THREE.BoxGeometry(0.74, 0.06, tableLenZ), creamTableMat);
+    creamTop.position.set(tx, 0.95, tableCenterZ);
+    creamTop.receiveShadow = true;
+    group.add(blackRim, creamTop);
+
+    // Table legs
+    for (const lz of [-2.55, -0.9, 0.75]) {
+      const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.72, 8), darkMetalMat);
+      leg.position.set(tx, 0.58, lz);
+      group.add(leg);
+    }
+
+    // Iconic Blue-and-White Soft Plastic Tissue Pack ("Hello 抽取式衛生紙") in center of each table
+    const tissueZ = -1.05 + (rIdx - 1) * 0.08;
+    const tissuePack = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.11, 0.24), tissuePackMat);
+    tissuePack.position.set(tx, 1.035, tissueZ);
+    // Pulled-up white tissue sheet sticking out of the top
+    const tissueSheet = new THREE.Mesh(new THREE.PlaneGeometry(0.11, 0.12), whiteTissueMat);
+    tissueSheet.position.set(tx, 1.13, tissueZ);
+    tissueSheet.rotation.y = 0.35;
+    tissueSheet.rotation.z = 0.18;
+    group.add(tissuePack, tissueSheet);
+
+    // Round dark metal stools along both sides of the table
+    for (const sz of [-2.25, -1.35, -0.45, 0.45]) {
+      for (const sideOffset of [-0.52, 0.52]) {
+        const sx = tx + sideOffset;
+        const stoolSeat = new THREE.Mesh(new THREE.CylinderGeometry(0.19, 0.18, 0.05, 14), stoolSeatMat);
+        stoolSeat.position.set(sx, 0.66, sz);
+        const stoolBase = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.19, 0.42, 10), darkMetalMat);
+        stoolBase.position.set(sx, 0.43, sz);
+        group.add(stoolSeat, stoolBase);
+      }
+    }
+
+    // Table collider (leaving walkable aisle on the North/right side z = +1.15..+3.65 AND between tables)
+    colliders.push({
+      minX: tx - 0.42,
+      maxX: tx + 0.42,
+      minZ: -2.85,
+      maxZ: 1.05,
+    });
+  });
+
+  // Seated Diner 1 (Middle-row right side: Male student in crisp white shirt, seen from behind in photo!)
+  const whiteShirtStudent = createSeatedDinerMesh('#f8fafc', '#f5d0b5', '#111827', false);
+  whiteShirtStudent.position.set(-8.68, 0.22, 0.42);
+  whiteShirtStudent.rotation.y = Math.PI / 2; // Facing +x (toward entrance/curtain)
+  group.add(whiteShirtStudent);
+
+  // Seated Diner 2 (Back-row left side: Older gentleman in blue/white striped polo shirt eating noodles!)
+  const stripedPoloUncle = createSeatedDinerMesh('#cbd5e1', '#eab696', '#9ca3af', true);
+  stripedPoloUncle.position.set(-10.58, 0.22, -1.65);
+  stripedPoloUncle.rotation.y = Math.PI / 2; // Facing +x (leaning over back table)
+  group.add(stripedPoloUncle);
+
+  // Noodle bowls in front of both diners
+  for (const [bx, bz] of [
+    [-7.35, 0.42],
+    [-9.25, -1.65],
+  ]) {
+    const bowl = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.14, 0.09, 0.09, 14),
+      new THREE.MeshStandardMaterial({ color: 0x18181b, roughness: 0.35 })
+    );
+    bowl.position.set(bx, 1.02, bz);
+    const chiliTop = new THREE.Mesh(
+      new THREE.CircleGeometry(0.12, 12),
+      new THREE.MeshStandardMaterial({ color: 0x991b1b, roughness: 0.4 })
+    );
+    chiliTop.rotation.x = -Math.PI / 2;
+    chiliTop.position.set(bx, 1.068, bz);
+    group.add(bowl, chiliTop);
+  }
+
+  // Interactable Indoor Seat 1: Sit at the exact camera perspective of the user's interior photo!
+  interactables.push({
+    id: 'seat-dahongpao-photo-view',
+    kind: 'seat',
+    label: '坐進【大紅袍店內後排圓凳】（1:1 實景照片視角吹冷氣吃麵）',
+    position: new THREE.Vector3(-11.72, 1.15, -0.45),
+    radius: 2.3,
+    seatLookAt: new THREE.Vector3(-5.8, 1.55, -0.45),
+  });
+
+  // Interactable Indoor Seat 2: Sit at the front table right inside the PVC strip curtain
+  interactables.push({
+    id: 'seat-dahongpao-front',
+    kind: 'seat',
+    label: '坐進【大紅袍店內前排座位】享用川味燃麵',
+    position: new THREE.Vector3(-7.9, 1.15, -0.45),
+    radius: 2.1,
+    seatLookAt: new THREE.Vector3(-6.1, 1.65, -2.2),
+  });
+
+  // ============================================================================
+  // 7. AUTHENTIC EXTERIOR STOREFRONT (3 光華路26巷 — Right Cooking Stall + Left Steps)
+  // ============================================================================
+  // Left-side 2-step ceramic-tiled entrance steps (z = +0.05 to +3.65, x = -4.65 to -5.85)
+  const stepTileMat = new THREE.MeshStandardMaterial({ color: 0x9e9589, roughness: 0.8 });
+  const step1 = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.11, 3.5), stepTileMat);
+  step1.position.set(-4.95, 0.055, 1.8);
+  const step2 = new THREE.Mesh(new THREE.BoxGeometry(0.65, 0.21, 3.5), stepTileMat);
+  step2.position.set(-5.52, 0.105, 1.8);
+  // Anti-slip black nosing strips on step edges
+  const nosing1 = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.02, 3.48), darkMetalMat);
+  nosing1.position.set(-4.69, 0.11, 1.8);
+  const nosing2 = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.02, 3.48), darkMetalMat);
+  nosing2.position.set(-5.21, 0.21, 1.8);
+  group.add(step1, step2, nosing1, nosing2);
+
+  // Right-side White Cooking Stall Counter (白色料理台, z = -3.65 to -0.15, x = -4.75 to -5.75)
+  // Hollow concrete blocks base under counter (空心磚墊高底座)
+  for (const bz of [-3.1, -1.9, -0.7]) {
+    const cinderBlock = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.18, 0.42), weatheredConcreteMat);
+    cinderBlock.position.set(-4.95, 0.12, bz);
+    group.add(cinderBlock);
+  }
+
+  // Main white counter box with 4-panel food photo front texture ("000" knobs + "大紅袍" red strip)
+  const counterFrontTex = createDahongpaoCounterFrontTexture();
+  const whiteCounterMat = new THREE.MeshStandardMaterial({ color: 0xe7e9ee, roughness: 0.65 });
+  const counterFrontMat = new THREE.MeshStandardMaterial({ map: counterFrontTex, roughness: 0.5 });
+
+  const stallBody = new THREE.Mesh(
+    new THREE.BoxGeometry(0.96, 1.04, 3.35),
+    [
+      counterFrontMat, // +x (street-facing front with 4 food photos & 000 knobs!)
+      whiteCounterMat, // -x
+      whiteCounterMat, // +y
+      whiteCounterMat, // -y
+      whiteCounterMat, // +z (left side toward steps)
+      whiteCounterMat, // -z (right side)
+    ]
+  );
+  stallBody.position.set(-5.18, 0.72, -1.85);
+  stallBody.castShadow = true;
+  stallBody.receiveShadow = true;
+  group.add(stallBody);
+
+  // Distinctive Angled White Side Shield on left (+z) side of counter (白色斜角防風側擋板)
+  const sideShieldLower = new THREE.Mesh(new THREE.BoxGeometry(1.02, 0.88, 0.08), whiteCounterMat);
+  sideShieldLower.position.set(-5.18, 0.64, -0.16);
+  const sideShieldUpper = new THREE.Mesh(new THREE.BoxGeometry(0.68, 0.42, 0.08), whiteCounterMat);
+  sideShieldUpper.position.set(-5.32, 1.26, -0.16);
+  sideShieldUpper.rotation.z = -0.35;
+  group.add(sideShieldLower, sideShieldUpper);
+
+  // Black Countertop Overhang (黑色料理台檯面)
+  const blackCounterTop = new THREE.Mesh(
+    new THREE.BoxGeometry(1.08, 0.06, 3.45),
+    new THREE.MeshStandardMaterial({ color: 0x18181b, roughness: 0.35, metalness: 0.25 })
+  );
+  blackCounterTop.position.set(-5.16, 1.26, -1.88);
+  group.add(blackCounterTop);
+
+  // Countertop Props from Exterior Photo:
+  // 1) 3 Tall stacks of white paper/plastic bowls on left (+z) end of counter
+  const paperBowlMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.4 });
+  const stackPositions: Array<[number, number, number]> = [
+    [-5.02, -0.45, 0.46],
+    [-5.02, -0.74, 0.42],
+    [-5.02, -1.00, 0.26],
+  ];
+  stackPositions.forEach(([sx, sz, sh]) => {
+    const stack = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.095, sh, 14), paperBowlMat);
+    stack.position.set(sx, 1.29 + sh / 2, sz);
+    group.add(stack);
+  });
+
+  // 2) Order pad & small upright menu stand in center of counter
+  const orderPad = new THREE.Mesh(
+    new THREE.BoxGeometry(0.24, 0.04, 0.32),
+    new THREE.MeshStandardMaterial({ color: 0xe2e8f0, roughness: 0.7 })
+  );
+  orderPad.position.set(-4.95, 1.31, -1.32);
+  const miniStand = new THREE.Mesh(
+    new THREE.BoxGeometry(0.06, 0.32, 0.22),
+    new THREE.MeshStandardMaterial({ color: 0xfef3c7, roughness: 0.5 })
+  );
+  miniStand.position.set(-5.05, 1.45, -1.58);
+  miniStand.rotation.z = -0.15;
+  group.add(orderPad, miniStand);
+
+  // 3) 2 White ceramic bowls in middle-right
+  for (const bz of [-2.15, -2.48]) {
+    const cBowl = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.08, 0.11, 14), paperBowlMat);
+    cBowl.position.set(-5.02, 1.34, bz);
+    group.add(cBowl);
+  }
+
+  // 4) Small white oscillating desk fan on right (-z) end of counter (白色小電扇)
+  const deskFanStand = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.08, 0.28, 10), paperBowlMat);
+  deskFanStand.position.set(-5.02, 1.42, -3.05);
+  const deskFanHead = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 0.09, 14), paperBowlMat);
+  deskFanHead.rotation.z = Math.PI / 2;
+  deskFanHead.position.set(-5.02, 1.62, -3.05);
+  group.add(deskFanStand, deskFanHead);
+
+  // Collider for the exterior cooking stall + partition
+  colliders.push({
+    minX: -6.35,
+    maxX: -4.55,
+    minZ: -3.85,
+    maxZ: -0.12,
+  });
+
+  // Chef in black short-sleeve T-shirt behind cooking counter (黑衣老闆)
+  const chefNpc = createStylizedPerson('#18181b', '#eab696', '#111827');
+  chefNpc.position.set(-5.72, 0.22, -1.45);
+  chefNpc.rotation.y = Math.PI / 2;
+  group.add(chefNpc);
+
+  // Steam rising from noodle boiler behind the counter
+  steamEmitters.push({
+    origin: new THREE.Vector3(-5.35, 1.38, -1.85),
+    spread: 0.35,
+  });
+
+  // ============================================================================
+  // 8. LEFT PREP AREA (Stainless Fridge + Green Basket + Staff in Orange Apron)
+  //    AND BACK WALL RED BANNER ("人生七味：酸甜苦辣鹹香麻 ／ 食在中國 味在四川")
+  // ============================================================================
+  // Stainless Steel Commercial Refrigerator (不鏽鋼冰箱) on left side (z = +2.35 to +3.75)
+  const fridge = new THREE.Mesh(new THREE.BoxGeometry(0.85, 1.45, 1.25), steelMat);
+  fridge.position.set(-5.78, 0.94, 3.05);
+  // Green plastic colander/basket on top of fridge (綠色塑膠菜籃)
+  const greenBasket = new THREE.Mesh(
+    new THREE.BoxGeometry(0.48, 0.18, 0.56),
+    new THREE.MeshStandardMaterial({ color: 0x16a34a, roughness: 0.45 })
+  );
+  greenBasket.position.set(-5.75, 1.75, 2.95);
+  // Orange-red prep bowl inside basket
+  const orangePrep = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.16, 0.12, 0.14, 12),
+    new THREE.MeshStandardMaterial({ color: 0xea580c, roughness: 0.5 })
+  );
+  orangePrep.position.set(-5.75, 1.88, 2.95);
+  group.add(fridge, greenBasket, orangePrep);
+
+  colliders.push({
+    minX: -6.25,
+    maxX: -5.25,
+    minZ: 2.35,
+    maxZ: 3.85,
+  });
+
+  // Female Staff Member in Orange Apron with Black Cross-Ties on Back (橘色圍裙店員)
+  const apronStaff = createOrangeApronStaffMesh();
+  apronStaff.position.set(-5.38, 0.22, 2.45);
+  apronStaff.rotation.y = -Math.PI / 2 - 0.25; // Facing inward toward prep counter, showing orange apron back tie!
+  group.add(apronStaff);
+
+  // Red Horizontal Wall Banner above cooking/prep area:
+  // 「人生七味：酸 甜 苦 辣 鹹 香 麻 ／ 食在中國 味在四川」
+  const qiweiTex = createDahongpaoSevenFlavorsBannerTexture();
+  const qiweiBanner = new THREE.Mesh(
+    new THREE.PlaneGeometry(1.95, 0.66),
+    new THREE.MeshStandardMaterial({ map: qiweiTex, roughness: 0.55 })
+  );
+  qiweiBanner.rotation.y = Math.PI / 2;
+  qiweiBanner.position.set(-6.02, 2.38, -1.65);
+  group.add(qiweiBanner);
+
+  // ============================================================================
+  // 9. DUAL STOREFRONT CANOPIES + HANGING ROUND RED LANTERN ("大紅袍")
+  // ============================================================================
+  // Right Canopy (z = -4.15 to +0.15): Dark Brown Retractable Canvas Awning (深咖啡色伸縮遮雨棚)
+  const brownAwningMat = new THREE.MeshStandardMaterial({
+    color: 0x3e2f26,
+    roughness: 0.78,
+    side: THREE.DoubleSide,
+  });
+  const rightAwning = new THREE.Mesh(new THREE.BoxGeometry(2.15, 0.08, 4.35), brownAwningMat);
+  rightAwning.position.set(-4.95, 2.92, -1.98);
+  rightAwning.rotation.z = -0.22;
+  rightAwning.castShadow = true;
+  // Front roller tube bar
+  const awningRoller = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 4.38, 10), steelMat);
+  awningRoller.rotation.x = Math.PI / 2;
+  awningRoller.position.set(-3.92, 2.68, -1.98);
+  group.add(rightAwning, awningRoller);
+
+  // Left Canopy (z = +0.15 to +4.15): Aged Translucent Corrugated Dome Canopy (半圓弧波浪採光罩)
+  const agedCanopyMat = new THREE.MeshStandardMaterial({
+    color: 0xcbd5c0,
+    transparent: true,
+    opacity: 0.86,
+    roughness: 0.55,
+  });
+  const leftCanopy = new THREE.Mesh(new THREE.BoxGeometry(2.05, 0.14, 4.05), agedCanopyMat);
+  leftCanopy.position.set(-4.98, 3.05, 2.15);
+  leftCanopy.rotation.z = -0.18;
+  // White vertical valance strips hanging from front of left canopy
+  for (const vz of [0.25, 1.55, 2.85, 3.95]) {
+    const valanceStrip = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.28, 0.16), paperBowlMat);
+    valanceStrip.position.set(-4.02, 2.76, vz);
+    group.add(valanceStrip);
+  }
+  group.add(leftCanopy);
+
+  // Traditional Round Red Cloth Lantern ("大紅袍") hanging under right side of brown awning
+  const lanternGroup = new THREE.Group();
+  lanternGroup.position.set(-4.72, 2.78, -2.75);
+  const lanternCord = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 0.22, 6), darkMetalMat);
+  lanternCord.position.y = -0.1;
+
+  const dhpLanternTex = createDahongpaoLanternTexture();
+  const dhpLanternMat = new THREE.MeshStandardMaterial({
+    map: dhpLanternTex,
+    emissive: new THREE.Color(0xff4500),
+    emissiveMap: dhpLanternTex,
+    emissiveIntensity: 0.75,
+    roughness: 0.45,
+  });
+  emissiveSignMaterials.push(dhpLanternMat);
+
+  const lanternSphere = new THREE.Mesh(new THREE.SphereGeometry(0.32, 18, 14), dhpLanternMat);
+  lanternSphere.scale.set(1.05, 0.88, 1.05);
+  lanternSphere.position.y = -0.36;
+  lanternGroup.add(lanternCord, lanternSphere);
+  group.add(lanternGroup);
+  lanterns.push(lanternGroup);
+
+  // Exterior Warm Storefront Light above cooking counter
+  const extLight = new THREE.PointLight(0xffe4b5, 16, 16, 1.2);
+  extLight.position.set(-4.4, 2.65, -1.5);
+  group.add(extLight);
+  shopLights.push(extLight);
+
+  // Main Shop Order Interaction at the White Cooking Counter
+  interactables.push({
+    id: `shop-${shop.id}`,
+    kind: 'shop',
+    label: `向【${shop.name}（光華路26巷3號）】點餐`,
+    position: new THREE.Vector3(-4.25, 1.25, -1.65),
+    radius: 3.3,
+    shop,
+  });
+
+  scene.add(group);
+}
+
+/**
+ * Helper: Creates the staff member wearing an orange apron tied in the back over a black shirt
+ * as seen on the left steps of the exterior photo.
+ */
+function createOrangeApronStaffMesh(): THREE.Group {
+  const g = createStylizedPerson('#18181b', '#eab696', '#1c1917');
+  const apronMat = new THREE.MeshStandardMaterial({ color: 0xf97316, roughness: 0.65 });
+  const tieMat = new THREE.MeshStandardMaterial({ color: 0x111827, roughness: 0.7 });
+
+  // Orange apron front & back wrap
+  const apronFront = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.66, 0.04), apronMat);
+  apronFront.position.set(0, 1.02, 0.14);
+  const apronBack = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.58, 0.04), apronMat);
+  apronBack.position.set(0, 1.06, -0.14);
+
+  // Black cross-straps and bow tie on the back of the orange apron
+  const strapL = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.55, 0.05), tieMat);
+  strapL.position.set(-0.11, 1.15, -0.15);
+  strapL.rotation.z = -0.22;
+  const strapR = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.55, 0.05), tieMat);
+  strapR.position.set(0.11, 1.15, -0.15);
+  strapR.rotation.z = 0.22;
+  const bow = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.06, 0.06), tieMat);
+  bow.position.set(0, 0.96, -0.16);
+
+  g.add(apronFront, apronBack, strapL, strapR, bow);
+  return g;
+}
+
+/**
+ * Helper: Creates a seated diner for the interior of 大紅袍
+ */
+function createSeatedDinerMesh(
+  shirtHex: string,
+  skinHex: string,
+  hairHex: string,
+  stripedPolo: boolean
+): THREE.Group {
+  const g = new THREE.Group();
+  let shirtMat: THREE.MeshStandardMaterial;
+
+  if (stripedPolo) {
+    const canvas = document.createElement('canvas');
+    canvas.width = 128;
+    canvas.height = 128;
+    const ctx = canvas.getContext('2d')!;
+    ctx.fillStyle = '#e2e8f0';
+    ctx.fillRect(0, 0, 128, 128);
+    ctx.fillStyle = '#475569';
+    for (let y = 0; y < 128; y += 12) {
+      ctx.fillRect(0, y, 128, 5);
+    }
+    // Blue collar band
+    ctx.fillStyle = '#0284c7';
+    ctx.fillRect(0, 0, 128, 18);
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    shirtMat = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.75 });
+  } else {
+    shirtMat = new THREE.MeshStandardMaterial({ color: shirtHex, roughness: 0.7 });
+  }
+
+  const pantsMat = new THREE.MeshStandardMaterial({ color: 0x1f2937, roughness: 0.85 });
+  const skinMat = new THREE.MeshStandardMaterial({ color: skinHex, roughness: 0.7 });
+  const hairMat = new THREE.MeshStandardMaterial({ color: hairHex, roughness: 0.7 });
+
+  // Seated thighs & lower legs
+  const thighs = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.18, 0.42), pantsMat);
+  thighs.position.set(0, 0.52, 0.12);
+  const calves = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.45, 0.2), pantsMat);
+  calves.position.set(0, 0.24, 0.26);
+
+  // Slightly forward-leaning torso
+  const torso = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.64, 0.3), shirtMat);
+  torso.position.set(0, 0.92, 0.04);
+  torso.rotation.x = 0.16;
+
+  // Arms resting on table
+  const armL = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.42, 0.14), skinMat);
+  armL.position.set(-0.3, 0.88, 0.22);
+  armL.rotation.x = -0.85;
+  const armR = armL.clone();
+  armR.position.x = 0.3;
+
+  // Head
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.21, 14, 12), skinMat);
+  head.position.set(0, 1.38, 0.12);
+
+  if (!stripedPolo) {
+    // Full dark hair for the young student in white shirt
+    const hair = new THREE.Mesh(
+      new THREE.SphereGeometry(0.225, 14, 10, 0, Math.PI * 2, 0, Math.PI * 0.62),
+      hairMat
+    );
+    hair.position.set(0, 1.41, 0.1);
+    g.add(hair);
+  }
+
+  g.add(thighs, calves, torso, armL, armR, head);
   return g;
 }

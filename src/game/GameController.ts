@@ -171,8 +171,25 @@ export class GameController {
     this.updateHUD();
 
     const params = new URLSearchParams(window.location.search);
-    if (params.get('preview') === '1') {
+    if (params.get('preview') === '1' || params.has('view')) {
       this.startGame(false);
+      const view = params.get('view');
+      if (view === 'dahongpao-ext') {
+        // Switch to afternoon daylight for crisp storefront inspection
+        this.weatherTime.cycleTime();
+        this.weatherTime.cycleTime(); // night -> latenight -> afternoon
+        this.playerPos.set(-1.35, 1.78, 0.95);
+        this.yaw = Math.PI / 2 - 0.38;
+        this.pitch = -0.06;
+        this.updateHUD();
+      } else if (view === 'dahongpao-int') {
+        this.weatherTime.cycleTime();
+        this.weatherTime.cycleTime();
+        this.playerPos.set(-11.45, 1.56, -0.85);
+        this.yaw = -Math.PI / 2 + 0.08;
+        this.pitch = -0.02;
+        this.updateHUD();
+      }
     }
 
     this.animate();
@@ -1002,7 +1019,7 @@ export class GameController {
       const tileGround = this.google3DTiles.sampleGroundHeight(this.playerPos.x, this.playerPos.z, rayStartY);
       groundY = tileGround !== null ? tileGround + 1.65 : this.playerPos.y;
     } else {
-      groundY = this.alley.getGroundHeight(this.playerPos.z) + 1.65;
+      groundY = this.alley.getGroundHeight(this.playerPos.z, this.playerPos.x) + 1.65;
     }
 
     if (!this.isGrounded || this.playerPos.y > groundY + 0.01) {
