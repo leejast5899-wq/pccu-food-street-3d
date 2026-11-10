@@ -82,6 +82,8 @@
       <div id="hud-quick-actions" class="hud-panel">
         <button id="btn-real-3d" class="chip-btn" title="Google 地圖 1:1 實景設定 [G]">🌍 Google 1:1 實景</button>
         <button id="btn-camera-iso" class="chip-btn" title="切換 3/4 斜角俯視 RPG 視角 / 第一人稱 [V]">🎥 3/4 斜角視角</button>
+        <button id="btn-aerial-map" class="chip-btn" title="空拍底圖定位模式 [B]">🗺️ 空拍定位</button>
+        <button id="btn-aerial-debug" class="chip-btn hidden" title="編輯定位模式：點地面印出座標 [K]">📍 編輯定位</button>
         <button id="btn-time" class="chip-btn" title="切換時段 [1]">🕒 時段</button>
         <button id="btn-weather" class="chip-btn" title="切換陽明山天候 [2]">🌫️ 天氣</button>
         <button id="btn-umbrella" class="chip-btn" title="撐傘 / 收傘 [U]">☂️ 雨傘</button>
@@ -140,8 +142,30 @@
         📷 拍照模式中 ・ 按 <kbd>P</kbd> 恢復介面
       </div>
 
+      <!-- Aerial Map Debug Coordinate Readout -->
+      <div id="aerial-debug-panel" class="hidden">
+        <div class="aerial-debug-title">📍 編輯定位模式（點擊地面取得座標）</div>
+        <div id="aerial-debug-coords">尚未點擊</div>
+        <div class="aerial-debug-hint">座標已印在 Console（F12），並自動複製到剪貼簿。左鍵拖曳旋轉・右鍵平移・滾輪縮放</div>
+      </div>
+
       <!-- Modal Backdrop -->
       <div id="modal-backdrop" class="hidden">
+        <!-- Aerial Store Info Modal (實拍照片彈窗) -->
+        <section id="store-info-modal" class="modal-card hidden">
+          <div class="modal-header">
+            <div>
+              <span id="store-info-tag" class="modal-tag">分類</span>
+              <h2 id="store-info-title">店家名稱</h2>
+              <p id="store-info-sub" class="shop-quote">街道・座標</p>
+            </div>
+            <button id="close-store-info-modal" class="icon-close">✕</button>
+          </div>
+          <div id="store-info-photos" class="store-photo-grid"></div>
+          <div class="store-info-actions">
+            <button id="btn-store-info-order" class="primary-btn hidden">🍜 進入街景點餐</button>
+          </div>
+        </section>
         <!-- Shop Menu Modal -->
         <section id="shop-modal" class="modal-card hidden">
           <div class="modal-header">

@@ -17,6 +17,8 @@ import { Google3DTilesWorld } from '../maps/google3DTiles';
 import { GoogleMap3DController } from '../maps/googleMaps3D';
 import { getSavedGoogleMapsApiKey, saveGoogleMapsApiKey } from '../maps/googleMapsLoader';
 import { AABB, BuiltAlley, Interactable, buildGuanghuaAlley, createStylizedPerson } from '../world/alleyBuilder';
+import { AerialMapWorld } from '../world/aerialMap';
+import { AERIAL_STORES, AERIAL_STREETS, AerialStore } from '../data/aerialStores';
 import { HeldItemRig } from '../world/heldItems';
 import { StudentNPC, StudentNPCManager } from '../world/npcs';
 import { WeatherAndTimeSystem } from '../world/weatherAndTime';
@@ -47,6 +49,14 @@ export class GameController {
   private viewMode: ViewMode = 'alley';
   private isometricMode = false;
   private playerAvatar: THREE.Group;
+
+  // Aerial map placement mode (空拍底圖定位模式)
+  private aerialWorld!: AerialMapWorld;
+  private aerialMode = false;
+  private renderPass!: RenderPass;
+  private savedFog: THREE.Fog | THREE.FogExp2 | null = null;
+  private aerialPointerDown = { x: 0, y: 0, active: false };
+  private activeAerialStore: AerialStore | null = null;
 
   // Player state
   private playerPos = new THREE.Vector3(0, 1.65, 22.8);
@@ -162,6 +172,7 @@ export class GameController {
     this.composer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.composer.setSize(window.innerWidth, window.innerHeight);
     const renderPass = new RenderPass(this.scene, this.camera);
+    this.renderPass = renderPass;
     this.bloomPass = new UnrealBloomPass(
       new THREE.Vector2(window.innerWidth, window.innerHeight),
       0.22, // strength
@@ -174,6 +185,7 @@ export class GameController {
     this.composer.addPass(outputPass);
 
     this.alley = buildGuanghuaAlley(this.scene);
+    this.aerialWorld = new AerialMapWorld(this.scene, canvas);
     this.weatherTime = new WeatherAndTimeSystem(this.scene, this.alley.animated);
     this.npcManager = new StudentNPCManager(this.scene);
     this.heldRig = new HeldItemRig(this.camera);
@@ -244,6 +256,12 @@ export class GameController {
         this.yaw = 0.35;
         this.toggleIsometricMode();
         this.updateHUD();
+      } else if (view === 'aerial' || view === 'aerial-debug') {
+        this.weatherTime.cycleTime();
+        this.weatherTime.cycleTime(); // night -> latenight -> afternoon
+        this.toggleAerialMode();
+        if (view === 'aerial-debug') this.toggleAerialDebug();
+        this.updateHUD();
       }
     }
 
@@ -256,6 +274,37 @@ export class GameController {
       this.camera.updateProjectionMatrix();
       this.renderer.setSize(window.innerWidth, window.innerHeight);
       this.composer.setSize(window.innerWidth, window.innerHeight);
+      this.aerialWorld.resize();
+    });
+
+    // Aerial map: click (not drag) on ground/store
+    this.canvas.addEventListener('pointerdown', (e) => {
+      if (!this.aerialMode) return;
+      this.aerialPointerDown = { x: e.clientX, y: e.clientY, active: true };
+    });
+    this.canvas.addEventListener('pointerup', (e) => {
+      if (!this.aerialMode || !this.aerialPointerDown.active || this.modalOpen) return;
+      this.aerialPointerDown.active = false;
+      const moved = Math.hypot(e.clientX - this.aerialPointerDown.x, e.clientY - this.aerialPointerDown.y);
+      if (moved > 5 || e.button !== 0) return;
+      this.handleAerialClick(e.clientX, e.clientY);
+    });
+    document.getElementById('btn-aerial-map')!.addEventListener('click', () => {
+      this.sound.init();
+      this.toggleAerialMode();
+    });
+    document.getElementById('btn-aerial-debug')!.addEventListener('click', () => {
+      this.sound.init();
+      this.toggleAerialDebug();
+    });
+    document.getElementById('close-store-info-modal')!.addEventListener('click', () => this.closeAllModals());
+    document.getElementById('btn-store-info-order')!.addEventListener('click', () => {
+      const linked = this.activeAerialStore?.linkedShopId;
+      const shop = SHOPS.find((s) => s.id === linked);
+      if (!shop) return;
+      this.closeAllModals();
+      this.toggleAerialMode();
+      this.openShopModal(shop);
     });
 
     // Start buttons
@@ -278,7 +327,7 @@ export class GameController {
 
     // Canvas mouse look (Pointer Lock OR drag fallback)
     this.canvas.addEventListener('mousedown', (e) => {
-      if (!this.started || this.modalOpen) return;
+      if (!this.started || this.modalOpen || this.aerialMode) return;
       this.sound.init();
       if (this.dialogueOpen) {
         this.closeDialogue();
@@ -298,7 +347,7 @@ export class GameController {
     });
 
     window.addEventListener('mousemove', (e) => {
-      if (!this.started || this.modalOpen) return;
+      if (!this.started || this.modalOpen || this.aerialMode) return;
       if (this.pointerLocked) {
         this.yaw -= e.movementX * 0.0022;
         this.pitch = THREE.MathUtils.clamp(this.pitch - e.movementY * 0.0022, -1.1, 1.1);
@@ -371,6 +420,10 @@ export class GameController {
         this.toggleMute();
       } else if (code === 'KeyV') {
         this.toggleIsometricMode();
+      } else if (code === 'KeyB') {
+        this.toggleAerialMode();
+      } else if (code === 'KeyK' && this.aerialMode) {
+        this.toggleAerialDebug();
       }
     });
 
@@ -545,6 +598,7 @@ export class GameController {
   }
 
   private toggleIsometricMode(): void {
+    if (this.aerialMode) return;
     this.isometricMode = !this.isometricMode;
     this.playerAvatar.visible = this.isometricMode;
     this.elBtnCameraIso.classList.toggle('active', this.isometricMode);
@@ -959,7 +1013,8 @@ export class GameController {
     this.elJournalModal.classList.add('hidden');
     this.elTriviaModal.classList.add('hidden');
     this.elGmapsModal.classList.add('hidden');
-    if (this.preferPointerLock && this.started && this.viewMode !== 'map3d') {
+    document.getElementById('store-info-modal')!.classList.add('hidden');
+    if (this.preferPointerLock && this.started && this.viewMode !== 'map3d' && !this.aerialMode && !this.isometricMode) {
       try {
         this.canvas.requestPointerLock();
       } catch {
@@ -972,6 +1027,139 @@ export class GameController {
     if (document.pointerLockElement === this.canvas) {
       document.exitPointerLock();
     }
+  }
+
+  // ===========================================================================
+  // 空拍底圖定位模式（Aerial Map Placement Mode）
+  // ===========================================================================
+  private toggleAerialMode(): void {
+    if (!this.aerialMode && this.viewMode !== 'alley') {
+      this.showToast('請先切回離線街景模式再進入空拍定位');
+      return;
+    }
+    this.aerialMode = !this.aerialMode;
+    const on = this.aerialMode;
+
+    if (on && this.isometricMode) this.toggleIsometricMode();
+    this.releasePointerIfLocked();
+    this.keys.clear();
+
+    this.aerialWorld.setActive(on);
+    this.alley.rootGroup.visible = !on;
+    this.npcManager.group.visible = !on;
+    this.renderPass.camera = on ? this.aerialWorld.camera : this.camera;
+
+    if (on) {
+      this.savedFog = this.scene.fog as THREE.Fog | THREE.FogExp2 | null;
+      this.scene.fog = null;
+    } else {
+      this.scene.fog = this.savedFog;
+      if (this.aerialWorld.debugMode) this.toggleAerialDebug();
+    }
+
+    this.elCrosshair.classList.toggle('hidden', on || this.photoMode);
+    this.elInteractPrompt.classList.add('hidden');
+    document.getElementById('btn-aerial-debug')!.classList.toggle('hidden', !on);
+    const btn = document.getElementById('btn-aerial-map')!;
+    btn.classList.toggle('active', on);
+    btn.textContent = on ? '🚶 回到街景' : '🗺️ 空拍定位';
+
+    this.showToast(
+      on
+        ? '🗺️ 空拍定位模式：左鍵拖曳旋轉・右鍵平移・滾輪縮放・點店家看實拍照・按 [K] 開啟編輯定位'
+        : '🚶 已回到光華路26巷街景步行模式'
+    );
+  }
+
+  private toggleAerialDebug(): void {
+    if (!this.aerialMode) return;
+    const on = !this.aerialWorld.debugMode;
+    this.aerialWorld.setDebugMode(on);
+    document.getElementById('aerial-debug-panel')!.classList.toggle('hidden', !on);
+    document.getElementById('btn-aerial-debug')!.classList.toggle('active', on);
+    this.canvas.classList.toggle('aerial-debug', on);
+    if (on) {
+      console.info(
+        '%c[空拍定位] 編輯定位模式已開啟：點擊地面即可取得正規化座標 { x, z }（-50 ~ 50）',
+        'color:#fca5a5;font-weight:bold'
+      );
+      console.table(
+        this.aerialStoresForConsole()
+      );
+    }
+    this.showToast(on ? '📍 編輯定位模式：點擊地面取得座標（已顯示三條街道中心線）' : '已關閉編輯定位模式');
+  }
+
+  private aerialStoresForConsole(): Array<Record<string, string | number>> {
+    return AERIAL_STREETS.flatMap((st) =>
+      AERIAL_STORES.filter((s) => s.street === st.id).map((s) => ({
+        街道: st.name,
+        id: s.id,
+        店名: s.name,
+        x: s.position.x,
+        z: s.position.z,
+        rotationY: s.rotationY ?? 0,
+      }))
+    );
+  }
+
+  private handleAerialClick(clientX: number, clientY: number): void {
+    const ndc = new THREE.Vector2((clientX / window.innerWidth) * 2 - 1, -(clientY / window.innerHeight) * 2 + 1);
+    const hit = this.aerialWorld.pick(ndc);
+    if (!hit) return;
+
+    if (hit.type === 'ground' && this.aerialWorld.debugMode) {
+      const snippet = `{ x: ${hit.x}, z: ${hit.z} }`;
+      console.log(`%c[空拍定位] ${snippet}`, 'color:#fef08a;font-weight:bold;font-size:13px', { x: hit.x, z: hit.z });
+      this.aerialWorld.showDebugMarker(hit.world);
+      document.getElementById('aerial-debug-coords')!.textContent = snippet;
+      navigator.clipboard?.writeText(snippet).catch(() => {
+        // Clipboard may be unavailable (non-secure context); console output is enough
+      });
+      return;
+    }
+
+    if (hit.type === 'store') {
+      this.openAerialStoreModal(hit.store);
+    }
+  }
+
+  private openAerialStoreModal(store: AerialStore): void {
+    this.sound.playUiClick();
+    this.activeAerialStore = store;
+    this.modalOpen = true;
+    const streetName = AERIAL_STREETS.find((s) => s.id === store.street)?.name ?? store.street;
+
+    document.getElementById('store-info-tag')!.textContent = store.category;
+    document.getElementById('store-info-title')!.textContent = store.name;
+    document.getElementById('store-info-sub')!.textContent =
+      `${streetName}・${store.side} ・ 座標 { x: ${store.position.x}, z: ${store.position.z} } ・ rotationY ${store.rotationY}`;
+
+    const grid = document.getElementById('store-info-photos')!;
+    grid.innerHTML = '';
+    if (store.streetPhotos.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'store-photo-empty';
+      empty.innerHTML = `📸 尚未加入實拍照片<br/>把照片放到 <code>public/textures/stores/</code>，再到 <code>src/data/aerialStores.ts</code> 的 <code>${store.id}</code> 填入 <code>streetPhotos</code> 與 <code>facadeImage</code> 即可顯示`;
+      grid.appendChild(empty);
+    } else {
+      store.streetPhotos.forEach((src) => {
+        const img = document.createElement('img');
+        img.src = `${import.meta.env.BASE_URL}${src}`;
+        img.alt = store.name;
+        img.loading = 'lazy';
+        grid.appendChild(img);
+      });
+    }
+
+    document.getElementById('btn-store-info-order')!.classList.toggle('hidden', !store.linkedShopId);
+
+    this.elModalBackdrop.classList.remove('hidden');
+    document.getElementById('store-info-modal')!.classList.remove('hidden');
+    this.elShopModal.classList.add('hidden');
+    this.elJournalModal.classList.add('hidden');
+    this.elTriviaModal.classList.add('hidden');
+    this.elGmapsModal.classList.add('hidden');
   }
 
   private showDialogue(speaker: string, text: string): void {
@@ -1262,6 +1450,13 @@ export class GameController {
     this.sound.updateAmbience(env.windStrength, env.rainIntensity, this.umbrellaOpen);
 
     if (this.viewMode !== 'map3d') {
+      if (this.aerialMode) {
+        this.aerialWorld.update(elapsed);
+        this.bloomPass.strength = 0.06;
+        this.composer.render();
+        this.updateStatsSlowly(dt);
+        return;
+      }
       if (this.viewMode === 'alley') {
         this.npcManager.update(dt, elapsed, env.rainIntensity, env.windStrength, this.playerPos);
       } else if (this.viewMode === '3dtiles') {
